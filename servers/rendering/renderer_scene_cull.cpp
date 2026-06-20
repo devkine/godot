@@ -3695,7 +3695,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			candidate.coverage = coverage;
 			candidate.distance_to_camera = ins->transform.origin.distance_to(camera_position);
 			candidate.original_index = i;
-			candidate.prefer_update = !(shadow_static_light_cache_enabled && light->bake_mode == RSE::LIGHT_BAKE_STATIC && !light->is_shadow_dirty() && light->get_shadow_render_frame_id() != UINT32_MAX);
+			candidate.prefer_update = light->is_shadow_dirty() || light->is_shadow_render_pending() || !(shadow_static_light_cache_enabled && light->bake_mode == RSE::LIGHT_BAKE_STATIC && light->get_shadow_render_frame_id() != UINT32_MAX);
 			positional_shadow_candidates.push_back(candidate);
 		}
 
@@ -3741,10 +3741,11 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			}
 
 			bool redraw = RSG::light_storage->shadow_atlas_update_light(p_shadow_atlas, light->instance, coverage, light->last_version);
+			redraw = redraw || light->is_shadow_render_pending();
 			if (redraw && shadow_min_update_interval_frames > 0 && light->get_shadow_render_frame_id() != UINT32_MAX && shadow_frame_number < light->get_shadow_render_frame_id() + shadow_min_update_interval_frames) {
 				redraw = false;
 				skipped_shadow_updates++;
-				light->make_shadow_dirty();
+				light->set_shadow_render_pending(true);
 			}
 
 			if (redraw && max_shadows_used < shadow_update_budget) {
@@ -3754,11 +3755,12 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 					light->make_shadow_dirty();
 				}
 				light->set_shadow_render_frame_id(shadow_frame_number);
+				light->set_shadow_render_pending(false);
 				RENDER_TIMESTAMP("< Render Light3D " + itos(candidate.original_index));
 			} else {
 				if (redraw) {
 					skipped_shadow_updates++;
-					light->make_shadow_dirty();
+					light->set_shadow_render_pending(true);
 				}
 			}
 

@@ -713,12 +713,17 @@ public:
 
 		uint32_t light_update_frame_id;
 		uint32_t shadow_render_frame_id;
+		bool shadow_render_pending;
 		bool light_intersects_multiple_cameras;
 		uint32_t light_intersects_multiple_cameras_timeout_frame_id;
 
 	public:
 		bool is_shadow_dirty() const { return shadow_dirty_count != 0; }
-		void make_shadow_dirty() { shadow_dirty_count = light_intersects_multiple_cameras ? 1 : 2; }
+		void make_shadow_dirty() {
+			shadow_dirty_count = light_intersects_multiple_cameras ? 1 : 2;
+			shadow_render_frame_id = UINT32_MAX;
+			shadow_render_pending = false;
+		}
 		void detect_light_intersects_multiple_cameras(uint32_t p_frame_id) {
 			// We need to detect the case where shadow updates are occurring
 			// more than once per frame. In this case, we need to turn off
@@ -747,6 +752,8 @@ public:
 
 		uint32_t get_shadow_render_frame_id() const { return shadow_render_frame_id; }
 		void set_shadow_render_frame_id(uint32_t p_frame_id) { shadow_render_frame_id = p_frame_id; }
+		bool is_shadow_render_pending() const { return shadow_render_pending; }
+		void set_shadow_render_pending(bool p_pending) { shadow_render_pending = p_pending; }
 
 		// Shadow updates can either full (everything in the shadow volume)
 		// or closely culled to the camera frustum.
@@ -761,6 +768,7 @@ public:
 			shadow_dirty_count = 1;
 			light_update_frame_id = UINT32_MAX;
 			shadow_render_frame_id = UINT32_MAX;
+			shadow_render_pending = false;
 			light_intersects_multiple_cameras_timeout_frame_id = UINT32_MAX;
 			light_intersects_multiple_cameras = false;
 		}

@@ -1582,7 +1582,16 @@ float RendererViewport::viewport_get_measured_render_time_gpu(RID p_viewport) co
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL_V(viewport, 0);
 
-	return double((viewport->time_gpu_end - viewport->time_gpu_begin) / 1000) / 1000.0;
+	if (viewport->time_gpu_end <= viewport->time_gpu_begin) {
+		return 0.0f;
+	}
+
+	const uint64_t gpu_delta = viewport->time_gpu_end - viewport->time_gpu_begin;
+	if (gpu_delta > 1000000000ULL) {
+		return 0.0f;
+	}
+
+	return float(double(gpu_delta) / 1000.0 / 1000.0);
 }
 
 void RendererViewport::viewport_set_snap_2d_transforms_to_pixel(RID p_viewport, bool p_enabled) {
@@ -1709,7 +1718,7 @@ void RendererViewport::handle_timestamp(String p_timestamp, uint64_t p_cpu_time,
 	if (p_timestamp.begins_with("vp_end")) {
 		viewport->time_cpu_end = p_cpu_time;
 		viewport->time_gpu_end = p_gpu_time;
-		viewport->render_info.gpu_frame_time_ms = float(double(viewport->time_gpu_end - viewport->time_gpu_begin) / 1000.0 / 1000.0);
+		viewport->render_info.gpu_frame_time_ms = viewport_get_measured_render_time_gpu(*vp);
 		if (viewport->measure_render_time) {
 			print_line(vformat("Renderer stats | vis3d=%d omni=%d spot=%d dir=%d shadow_cast=%d shadow_maps=%d atlas=%.1f%% skipped=%d clusters=%d avg=%.2f max=%d overflow=%d cpu_cull=%.2fms gpu=%.2fms",
 				viewport->render_info.visible_3d_instances,
