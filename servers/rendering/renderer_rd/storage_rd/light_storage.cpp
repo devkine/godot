@@ -2713,6 +2713,33 @@ bool LightStorage::shadow_atlas_update_light(RID p_atlas, RID p_light_instance, 
 	return should_redraw;
 }
 
+float LightStorage::shadow_atlas_get_usage(RID p_atlas) {
+	const ShadowAtlas *shadow_atlas = shadow_atlas_owner.get_or_null(p_atlas);
+	ERR_FAIL_NULL_V(shadow_atlas, 0.0f);
+
+	uint32_t total_slots = 0;
+	uint32_t used_slots = 0;
+
+	for (uint32_t i = 0; i < 4; i++) {
+		const ShadowAtlas::Quadrant &quadrant = shadow_atlas->quadrants[i];
+		if (quadrant.subdivision == 0) {
+			continue;
+		}
+		total_slots += quadrant.shadows.size();
+		for (const ShadowAtlas::Quadrant::Shadow &shadow : quadrant.shadows) {
+			if (shadow.owner.is_valid()) {
+				used_slots++;
+			}
+		}
+	}
+
+	if (total_slots == 0) {
+		return 0.0f;
+	}
+
+	return float(used_slots) * 100.0f / float(total_slots);
+}
+
 void LightStorage::_shadow_atlas_invalidate_shadow(ShadowAtlas::Quadrant::Shadow *p_shadow, RID p_atlas, ShadowAtlas *p_shadow_atlas, uint32_t p_quadrant, uint32_t p_shadow_idx) {
 	if (p_shadow->owner.is_valid()) {
 		LightInstance *sli = light_instance_owner.get_or_null(p_shadow->owner);

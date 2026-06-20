@@ -1159,6 +1159,8 @@ public:
 		return atlas->fb;
 	}
 
+	float shadow_atlas_get_usage(RID p_atlas) override;
+
 	virtual void shadow_atlas_update(RID p_atlas) override;
 	static RD::DataFormat get_shadow_atlas_depth_format(bool p_16_bits);
 	static uint32_t get_shadow_atlas_depth_usage_bits();

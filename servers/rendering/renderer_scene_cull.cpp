@@ -35,6 +35,7 @@
 #include "core/math/geometry_3d.h"
 #include "core/object/callable_mp.h"
 #include "core/object/worker_thread_pool.h"
+#include "core/os/os.h"
 #include "servers/rendering/rendering_light_culler.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_default.h"
@@ -46,7 +47,6 @@
 
 //#define DEBUG_CULL_TIME
 #ifdef DEBUG_CULL_TIME
-#include "core/os/os.h"
 #endif
 
 /* HALTON SEQUENCE */
@@ -3358,6 +3358,23 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	cull.frustum = Frustum(planes);
 
 	Vector<RID> directional_lights;
+	uint32_t visible_directional_lights = 0;
+	uint32_t visible_omni_lights = 0;
+	uint32_t visible_spot_lights = 0;
+	uint32_t shadow_casting_lights_visible = 0;
+	uint32_t skipped_shadow_updates = 0;
+	uint64_t cull_time_from = 0;
+	const bool shadow_budget_enabled = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/shadow_budget/enabled");
+	const uint32_t shadow_update_budget = shadow_budget_enabled ? MIN(uint32_t(MAX(int(GLOBAL_GET_CACHED(int, "rendering/atom_forward_scale/shadow_budget/max_shadow_maps_per_frame")), 0)), uint32_t(MAX_UPDATE_SHADOWS)) : uint32_t(MAX_UPDATE_SHADOWS);
+	const bool shadow_static_light_cache_enabled = shadow_budget_enabled && GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/shadow_budget/static_light_cache_enabled");
+	const bool shadow_distance_priority_enabled = shadow_budget_enabled && GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/shadow_budget/distance_priority_enabled");
+	const bool shadow_screen_size_priority_enabled = shadow_budget_enabled && GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/shadow_budget/screen_size_priority_enabled");
+	const uint32_t shadow_min_update_interval_frames = shadow_budget_enabled ? uint32_t(MAX(int(GLOBAL_GET_CACHED(int, "rendering/atom_forward_scale/shadow_budget/min_update_interval_frames")), 0)) : 0;
+	const uint32_t shadow_frame_number = uint32_t(RSG::rasterizer->get_frame_number());
+
+#ifdef DEV_ENABLED
+	cull_time_from = OS::get_singleton()->get_ticks_usec();
+#endif
 	// directional lights
 	{
 		cull.shadow_count = 0;
@@ -3378,11 +3395,15 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			//check shadow..
 
 			if (light) {
+				if (RSG::light_storage->light_has_shadow(E->base) && !(RSG::light_storage->light_get_type(E->base) == RSE::LIGHT_DIRECTIONAL && RSG::light_storage->light_directional_get_sky_mode(E->base) == RSE::LIGHT_DIRECTIONAL_SKY_MODE_SKY_ONLY)) {
+					shadow_casting_lights_visible++;
+				}
 				if (p_using_shadows && p_shadow_atlas.is_valid() && RSG::light_storage->light_has_shadow(E->base) && !(RSG::light_storage->light_get_type(E->base) == RSE::LIGHT_DIRECTIONAL && RSG::light_storage->light_directional_get_sky_mode(E->base) == RSE::LIGHT_DIRECTIONAL_SKY_MODE_SKY_ONLY)) {
 					lights_with_shadow.push_back(E);
 				}
 				//add to list
 				directional_lights.push_back(light->instance);
+				visible_directional_lights++;
 			}
 		}
 
@@ -3472,6 +3493,35 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			}
 			RSG::mesh_storage->update_mesh_instances();
 		}
+
+		for (uint32_t i = 0; i < (uint32_t)scene_cull_result.lights.size(); i++) {
+			Instance *ins = scene_cull_result.lights[i];
+
+			switch (RSG::light_storage->light_get_type(ins->base)) {
+				case RSE::LIGHT_OMNI:
+					visible_omni_lights++;
+					break;
+				case RSE::LIGHT_SPOT:
+					visible_spot_lights++;
+					break;
+				default:
+					break;
+			}
+
+			if (RSG::light_storage->light_has_shadow(ins->base)) {
+				shadow_casting_lights_visible++;
+			}
+		}
+
+		if (r_render_info) {
+			r_render_info->visible_3d_instances = scene_cull_result.geometry_instances.size();
+			r_render_info->visible_omni_lights = visible_omni_lights;
+			r_render_info->visible_spot_lights = visible_spot_lights;
+			r_render_info->visible_directional_lights = visible_directional_lights;
+			r_render_info->shadow_casting_lights_visible = shadow_casting_lights_visible;
+			r_render_info->shadow_atlas_usage = p_shadow_atlas.is_valid() ? RSG::light_storage->shadow_atlas_get_usage(p_shadow_atlas) : 0.0f;
+			r_render_info->skipped_shadow_updates = skipped_shadow_updates;
+		}
 	}
 
 	//render shadows
@@ -3487,7 +3537,8 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				const Cull::Shadow::Cascade &c = cull.shadows[i].cascades[j];
 				//			print_line("shadow " + itos(i) + " cascade " + itos(j) + " elements: " + itos(c.cull_result.size()));
 				RSG::light_storage->light_instance_set_shadow_transform(cull.shadows[i].light_instance, c.projection, c.transform, c.zfar, c.split, j, c.shadow_texel_size, c.bias_scale, c.range_begin, c.uv_scale);
-				if (max_shadows_used == MAX_UPDATE_SHADOWS) {
+				if (max_shadows_used == shadow_update_budget) {
+					skipped_shadow_updates++;
 					continue;
 				}
 				render_shadow_data[max_shadows_used].light = cull.shadows[i].light_instance;
@@ -3498,6 +3549,39 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		}
 
 		// Positional Shadows
+		struct PositionalShadowCandidate {
+			Instance *instance = nullptr;
+			InstanceLightData *light = nullptr;
+			float coverage = 0.0f;
+			float distance_to_camera = 0.0f;
+			uint32_t original_index = 0;
+			bool prefer_update = true;
+		};
+
+		struct PositionalShadowCandidateSort {
+			bool prefer_update_first = false;
+			bool use_screen_size_priority = true;
+			bool use_distance_priority = false;
+
+			_FORCE_INLINE_ bool operator()(const PositionalShadowCandidate &p_a, const PositionalShadowCandidate &p_b) const {
+				if (prefer_update_first && p_a.prefer_update != p_b.prefer_update) {
+					return p_a.prefer_update && !p_b.prefer_update;
+				}
+
+				if (use_screen_size_priority && p_a.coverage != p_b.coverage) {
+					return p_a.coverage > p_b.coverage;
+				}
+
+				if (use_distance_priority && p_a.distance_to_camera != p_b.distance_to_camera) {
+					return p_a.distance_to_camera < p_b.distance_to_camera;
+				}
+
+				return p_a.original_index < p_b.original_index;
+			}
+		};
+
+		thread_local LocalVector<PositionalShadowCandidate> positional_shadow_candidates;
+		positional_shadow_candidates.clear();
 		for (uint32_t i = 0; i < (uint32_t)scene_cull_result.lights.size(); i++) {
 			Instance *ins = scene_cull_result.lights[i];
 
@@ -3605,6 +3689,30 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				}
 			}
 
+			PositionalShadowCandidate candidate;
+			candidate.instance = ins;
+			candidate.light = light;
+			candidate.coverage = coverage;
+			candidate.distance_to_camera = ins->transform.origin.distance_to(camera_position);
+			candidate.original_index = i;
+			candidate.prefer_update = !(shadow_static_light_cache_enabled && light->bake_mode == RSE::LIGHT_BAKE_STATIC && !light->is_shadow_dirty() && light->get_shadow_render_frame_id() != UINT32_MAX);
+			positional_shadow_candidates.push_back(candidate);
+		}
+
+		if (shadow_budget_enabled && positional_shadow_candidates.size() > 1 && (shadow_static_light_cache_enabled || shadow_screen_size_priority_enabled || shadow_distance_priority_enabled)) {
+			SortArray<PositionalShadowCandidate, PositionalShadowCandidateSort> sorter;
+			sorter.compare.prefer_update_first = shadow_static_light_cache_enabled;
+			sorter.compare.use_screen_size_priority = shadow_screen_size_priority_enabled;
+			sorter.compare.use_distance_priority = shadow_distance_priority_enabled;
+			sorter.sort(positional_shadow_candidates.ptr(), positional_shadow_candidates.size());
+		}
+
+		for (uint32_t i = 0; i < (uint32_t)positional_shadow_candidates.size(); i++) {
+			const PositionalShadowCandidate &candidate = positional_shadow_candidates[i];
+			Instance *ins = candidate.instance;
+			InstanceLightData *light = candidate.light;
+			float coverage = candidate.coverage;
+
 			// We can detect whether multiple cameras are hitting this light, whether or not the shadow is dirty,
 			// so that we can turn off tighter caster culling.
 			light->detect_light_intersects_multiple_cameras(Engine::get_singleton()->get_frames_drawn());
@@ -3633,21 +3741,39 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			}
 
 			bool redraw = RSG::light_storage->shadow_atlas_update_light(p_shadow_atlas, light->instance, coverage, light->last_version);
+			if (redraw && shadow_min_update_interval_frames > 0 && light->get_shadow_render_frame_id() != UINT32_MAX && shadow_frame_number < light->get_shadow_render_frame_id() + shadow_min_update_interval_frames) {
+				redraw = false;
+				skipped_shadow_updates++;
+				light->make_shadow_dirty();
+			}
 
-			if (redraw && max_shadows_used < MAX_UPDATE_SHADOWS) {
+			if (redraw && max_shadows_used < shadow_update_budget) {
 				//must redraw!
-				RENDER_TIMESTAMP("> Render Light3D " + itos(i));
+				RENDER_TIMESTAMP("> Render Light3D " + itos(candidate.original_index));
 				if (_light_instance_update_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers)) {
 					light->make_shadow_dirty();
 				}
-				RENDER_TIMESTAMP("< Render Light3D " + itos(i));
+				light->set_shadow_render_frame_id(shadow_frame_number);
+				RENDER_TIMESTAMP("< Render Light3D " + itos(candidate.original_index));
 			} else {
 				if (redraw) {
+					skipped_shadow_updates++;
 					light->make_shadow_dirty();
 				}
 			}
+
 		}
 	}
+
+	if (r_render_info) {
+		r_render_info->shadow_maps_rendered = max_shadows_used;
+	}
+
+#ifdef DEV_ENABLED
+	if (r_render_info) {
+		r_render_info->cpu_cull_time_ms = float(double(OS::get_singleton()->get_ticks_usec() - cull_time_from) / 1000.0);
+	}
+#endif
 
 	//render SDFGI
 

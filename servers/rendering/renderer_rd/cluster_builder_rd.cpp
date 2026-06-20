@@ -33,6 +33,12 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_globals.h" // IWYU pragma: keep. RENDER_TIMESTAMP macro uses RSG.
 
+static _FORCE_INLINE_ uint32_t _popcount32(uint32_t p_value) {
+	p_value = p_value - ((p_value >> 1) & 0x55555555u);
+	p_value = (p_value & 0x33333333u) + ((p_value >> 2) & 0x33333333u);
+	return (((p_value + (p_value >> 4)) & 0x0F0F0F0Fu) * 0x01010101u) >> 24;
+}
+
 ClusterBuilderSharedDataRD::ClusterBuilderSharedDataRD() {
 	RD::VertexFormatID vertex_format;
 
@@ -433,6 +439,49 @@ void ClusterBuilderRD::begin(const Transform3D &p_view_transform, const Projecti
 	for (uint32_t i = 0; i < ELEMENT_TYPE_MAX; i++) {
 		cluster_count_by_type[i] = 0;
 	}
+	debug_overflow_count = 0;
+}
+
+bool ClusterBuilderRD::collect_debug_stats(DebugStats &r_stats) const {
+	r_stats = {};
+	if (cluster_buffer.is_null() || cluster_buffer_size == 0) {
+		return false;
+	}
+
+	Vector<uint8_t> data = RD::get_singleton()->buffer_get_data(cluster_buffer);
+	if (data.size() != int(cluster_buffer_size)) {
+		return false;
+	}
+
+	const uint32_t *words = reinterpret_cast<const uint32_t *>(data.ptr());
+	const uint32_t cluster_count = cluster_screen_size.x * cluster_screen_size.y;
+	const uint32_t words_per_cluster = max_elements_by_type / 32 + 32;
+	const uint32_t light_word_count = max_elements_by_type / 32;
+
+	r_stats.cluster_count = cluster_count;
+	r_stats.overflow_count = debug_overflow_count;
+
+	for (uint32_t cluster = 0; cluster < cluster_count; cluster++) {
+		uint32_t cluster_lights = 0;
+		for (uint32_t type = 0; type < ELEMENT_TYPE_MAX; type++) {
+			uint32_t base = (cluster + type * cluster_count) * words_per_cluster;
+			for (uint32_t word = 0; word < light_word_count; word++) {
+				cluster_lights += _popcount32(words[base + word]);
+			}
+		}
+
+		if (cluster_lights > 0) {
+			r_stats.non_empty_cluster_count++;
+			r_stats.total_lights += cluster_lights;
+			r_stats.max_lights_in_cluster = MAX(r_stats.max_lights_in_cluster, cluster_lights);
+		}
+	}
+
+	if (r_stats.non_empty_cluster_count > 0) {
+		r_stats.average_lights_per_non_empty_cluster = float(r_stats.total_lights) / float(r_stats.non_empty_cluster_count);
+	}
+
+	return true;
 }
 
 void ClusterBuilderRD::bake_cluster() {

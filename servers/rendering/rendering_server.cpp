@@ -3686,6 +3686,12 @@ void RenderingServer::init() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/positional_shadow/soft_shadow_filter_quality", PROPERTY_HINT_ENUM, "Hard (Fastest),Soft Very Low (Faster),Soft Low (Fast),Soft Medium (Average),Soft High (Slow),Soft Ultra (Slowest)"), 2);
 	GLOBAL_DEF("rendering/lights_and_shadows/positional_shadow/soft_shadow_filter_quality.mobile", 0);
 	GLOBAL_DEF("rendering/lights_and_shadows/positional_shadow/atlas_16_bits", true);
+	GLOBAL_DEF("rendering/atom_forward_scale/shadow_budget/enabled", false);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/atom_forward_scale/shadow_budget/max_shadow_maps_per_frame", PROPERTY_HINT_RANGE, "0,16,1"), 16);
+	GLOBAL_DEF("rendering/atom_forward_scale/shadow_budget/static_light_cache_enabled", false);
+	GLOBAL_DEF("rendering/atom_forward_scale/shadow_budget/distance_priority_enabled", false);
+	GLOBAL_DEF("rendering/atom_forward_scale/shadow_budget/screen_size_priority_enabled", true);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/atom_forward_scale/shadow_budget/min_update_interval_frames", PROPERTY_HINT_RANGE, "0,120,1,or_greater"), 0);
 
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/2d/shadow_atlas/size", PROPERTY_HINT_RANGE, "128,16384"), 2048);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/2d/batching/item_buffer_size", PROPERTY_HINT_RANGE, "128,1048576,1"), 16384);

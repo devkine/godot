@@ -1672,6 +1672,16 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 	if (current_cluster_builder) {
 		current_cluster_builder->bake_cluster();
+		if (p_render_data->render_info) {
+			p_render_data->render_info->shadow_maps_rendered = p_render_data->render_shadow_count;
+			ClusterBuilderRD::DebugStats cluster_stats;
+			if (current_cluster_builder->collect_debug_stats(cluster_stats)) {
+				p_render_data->render_info->cluster_count = cluster_stats.cluster_count;
+				p_render_data->render_info->cluster_average_lights_per_non_empty_cluster = cluster_stats.average_lights_per_non_empty_cluster;
+				p_render_data->render_info->cluster_max_lights = cluster_stats.max_lights_in_cluster;
+				p_render_data->render_info->cluster_overflow_count = cluster_stats.overflow_count;
+			}
+		}
 	}
 
 	if (rb_data.is_valid()) {

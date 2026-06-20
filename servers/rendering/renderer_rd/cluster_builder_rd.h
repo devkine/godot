@@ -172,6 +172,7 @@ private:
 
 	uint32_t cluster_count_by_type[ELEMENT_TYPE_MAX] = {};
 	uint32_t max_elements_by_type = 0;
+	uint32_t debug_overflow_count = 0;
 
 	RenderElementData *render_elements = nullptr;
 	uint32_t render_element_count = 0;
@@ -235,12 +236,15 @@ public:
 
 	_FORCE_INLINE_ void add_light(LightType p_type, const Transform3D &p_transform, float p_radius, float p_spot_aperture, const Vector2 &p_area_size) {
 		if (p_type == LIGHT_TYPE_OMNI && cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT] == max_elements_by_type) {
+			debug_overflow_count++;
 			return; // Max number elements reached.
 		}
 		if (p_type == LIGHT_TYPE_SPOT && cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT] == max_elements_by_type) {
+			debug_overflow_count++;
 			return; // Max number elements reached.
 		}
 		if (p_type == LIGHT_TYPE_AREA && cluster_count_by_type[ELEMENT_TYPE_AREA_LIGHT] == max_elements_by_type) {
+			debug_overflow_count++;
 			return; // Max number elements reached.
 		}
 
@@ -372,9 +376,11 @@ public:
 
 	_FORCE_INLINE_ void add_box(BoxType p_box_type, const Transform3D &p_transform, const Vector3 &p_half_size) {
 		if (p_box_type == BOX_TYPE_DECAL && cluster_count_by_type[ELEMENT_TYPE_DECAL] == max_elements_by_type) {
+			debug_overflow_count++;
 			return; // Max number elements reached.
 		}
 		if (p_box_type == BOX_TYPE_REFLECTION_PROBE && cluster_count_by_type[ELEMENT_TYPE_REFLECTION_PROBE] == max_elements_by_type) {
+			debug_overflow_count++;
 			return; // Max number elements reached.
 		}
 
@@ -426,6 +432,17 @@ public:
 	RID get_cluster_buffer() const;
 	uint32_t get_cluster_size() const;
 	uint32_t get_max_cluster_elements() const;
+
+	struct DebugStats {
+		uint32_t cluster_count = 0;
+		uint32_t non_empty_cluster_count = 0;
+		uint32_t total_lights = 0;
+		uint32_t max_lights_in_cluster = 0;
+		uint32_t overflow_count = 0;
+		float average_lights_per_non_empty_cluster = 0.0f;
+	};
+
+	bool collect_debug_stats(DebugStats &r_stats) const;
 
 	void set_shared(ClusterBuilderSharedDataRD *p_shared);
 

@@ -712,6 +712,7 @@ public:
 		int32_t shadow_dirty_count;
 
 		uint32_t light_update_frame_id;
+		uint32_t shadow_render_frame_id;
 		bool light_intersects_multiple_cameras;
 		uint32_t light_intersects_multiple_cameras_timeout_frame_id;
 
@@ -744,6 +745,9 @@ public:
 			DEV_ASSERT(shadow_dirty_count >= 0);
 		}
 
+		uint32_t get_shadow_render_frame_id() const { return shadow_render_frame_id; }
+		void set_shadow_render_frame_id(uint32_t p_frame_id) { shadow_render_frame_id = p_frame_id; }
+
 		// Shadow updates can either full (everything in the shadow volume)
 		// or closely culled to the camera frustum.
 		bool is_shadow_update_full() const { return shadow_dirty_count == 0; }
@@ -756,6 +760,7 @@ public:
 
 			shadow_dirty_count = 1;
 			light_update_frame_id = UINT32_MAX;
+			shadow_render_frame_id = UINT32_MAX;
 			light_intersects_multiple_cameras_timeout_frame_id = UINT32_MAX;
 			light_intersects_multiple_cameras = false;
 		}

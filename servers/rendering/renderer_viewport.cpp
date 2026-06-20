@@ -354,11 +354,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 	int scenario_canvas_max_layer = 0;
 	bool force_clear_render_target = false;
 
-	for (int i = 0; i < RSE::VIEWPORT_RENDER_INFO_TYPE_MAX; i++) {
-		for (int j = 0; j < RSE::VIEWPORT_RENDER_INFO_MAX; j++) {
-			p_viewport->render_info.info[i][j] = 0;
-		}
-	}
+	p_viewport->render_info.clear();
 
 	if (RSG::scene->is_scenario(p_viewport->scenario)) {
 		RID environment = RSG::scene->scenario_get_environment(p_viewport->scenario);
@@ -1713,6 +1709,24 @@ void RendererViewport::handle_timestamp(String p_timestamp, uint64_t p_cpu_time,
 	if (p_timestamp.begins_with("vp_end")) {
 		viewport->time_cpu_end = p_cpu_time;
 		viewport->time_gpu_end = p_gpu_time;
+		viewport->render_info.gpu_frame_time_ms = float(double(viewport->time_gpu_end - viewport->time_gpu_begin) / 1000.0 / 1000.0);
+		if (viewport->measure_render_time) {
+			print_line(vformat("Renderer stats | vis3d=%d omni=%d spot=%d dir=%d shadow_cast=%d shadow_maps=%d atlas=%.1f%% skipped=%d clusters=%d avg=%.2f max=%d overflow=%d cpu_cull=%.2fms gpu=%.2fms",
+				viewport->render_info.visible_3d_instances,
+				viewport->render_info.visible_omni_lights,
+				viewport->render_info.visible_spot_lights,
+				viewport->render_info.visible_directional_lights,
+				viewport->render_info.shadow_casting_lights_visible,
+				viewport->render_info.shadow_maps_rendered,
+				viewport->render_info.shadow_atlas_usage,
+				viewport->render_info.skipped_shadow_updates,
+				viewport->render_info.cluster_count,
+				viewport->render_info.cluster_average_lights_per_non_empty_cluster,
+				viewport->render_info.cluster_max_lights,
+				viewport->render_info.cluster_overflow_count,
+				viewport->render_info.cpu_cull_time_ms,
+				viewport->render_info.gpu_frame_time_ms));
+		}
 	}
 }
 
