@@ -3712,6 +3712,18 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			Instance *ins = candidate.instance;
 			InstanceLightData *light = candidate.light;
 			float coverage = candidate.coverage;
+			uint32_t required_shadow_passes = 1;
+			switch (RSG::light_storage->light_get_type(ins->base)) {
+				case RSE::LIGHT_OMNI: {
+					const RSE::LightOmniShadowMode shadow_mode = RSG::light_storage->light_omni_get_shadow_mode(ins->base);
+					required_shadow_passes = (shadow_mode == RSE::LIGHT_OMNI_SHADOW_DUAL_PARABOLOID || !RSG::light_storage->light_instances_can_render_shadow_cube()) ? 2 : 6;
+				} break;
+				case RSE::LIGHT_SPOT:
+				case RSE::LIGHT_AREA:
+				default:
+					required_shadow_passes = 1;
+					break;
+			}
 
 			// We can detect whether multiple cameras are hitting this light, whether or not the shadow is dirty,
 			// so that we can turn off tighter caster culling.
@@ -3748,7 +3760,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				light->set_shadow_render_pending(true);
 			}
 
-			if (redraw && max_shadows_used < shadow_update_budget) {
+			if (redraw && max_shadows_used + required_shadow_passes <= shadow_update_budget) {
 				//must redraw!
 				RENDER_TIMESTAMP("> Render Light3D " + itos(candidate.original_index));
 				if (_light_instance_update_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers)) {
