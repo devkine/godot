@@ -33,11 +33,11 @@ Replace these placeholder paths with the real screenshot files when you place th
 
 ### Atom Inspired Fork
 
-![Godot 4 Atom Edition lighting comparison](docs/atom_forward_scale/images/atom_edition.png)
+![Godot 4 Atom Edition lighting comparison](docs/images/atom_edition.png)
 
 ### Standard Godot 4
 
-![Standard Godot 4 lighting comparison](docs/atom_forward_scale/images/godot4_standard.png)
+![Standard Godot 4 lighting comparison](/docs/images/godot4_standard.png)
 
 ## Hard Rules For This Fork
 
