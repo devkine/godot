@@ -25,8 +25,16 @@
 - `servers/rendering/renderer_rd/renderer_scene_render_rd.cpp`: render-data packing into RD.
 - `servers/rendering/renderer_rd/forward_clustered/`: main Forward+ path.
 - `servers/rendering/renderer_rd/storage_rd/light_storage.*`: light buffers, light upload, shadow atlas.
+- `servers/rendering/renderer_rd/cluster_builder_rd.*`: clustered light build and debug stats.
+- `servers/rendering/renderer_viewport.cpp`: current console print hook for renderer/light/shadow stats.
 - `servers/rendering/renderer_rd/shaders/scene_forward_lights_inc.glsl`: shared light shading code.
 - `scene/3d/light_3d.*`: node-side light color, intensity, temperature, project to renderer.
+
+## Branch Notes
+
+- Large-scene shadow controls already live under `rendering/atom_forward_scale/shadow_budget/*`; keep that namespace instead of introducing `shadows/*`.
+- Current debug counters route through `RenderingServerTypes::RenderInfo` and print from `renderer_viewport.cpp`; reuse those fields before adding new counters.
+- `Light3D.set_shadow_priority()` / `get_shadow_priority()` exist as script/API-only hooks for shadow budget sorting. No inspector property yet.
 
 ## Safe Change Rule
 

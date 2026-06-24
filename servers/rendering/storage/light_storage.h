@@ -60,6 +60,7 @@ public:
 	virtual void light_set_negative(RID p_light, bool p_enable) = 0;
 	virtual void light_set_cull_mask(RID p_light, uint32_t p_mask) = 0;
 	virtual void light_set_distance_fade(RID p_light, bool p_enabled, float p_begin, float p_shadow, float p_length) = 0;
+	virtual void light_set_shadow_priority(RID p_light, float p_priority) = 0;
 	virtual void light_set_reverse_cull_face_mode(RID p_light, bool p_enabled) = 0;
 	virtual void light_set_shadow_caster_mask(RID p_light, uint32_t p_caster_mask) = 0;
 	virtual uint32_t light_get_shadow_caster_mask(RID p_light) const = 0;
@@ -91,6 +92,7 @@ public:
 	virtual RSE::LightType light_get_type(RID p_light) const = 0;
 	virtual AABB light_get_aabb(RID p_light) const = 0;
 	virtual float light_get_param(RID p_light, RSE::LightParam p_param) = 0;
+	virtual float light_get_shadow_priority(RID p_light) const = 0;
 	virtual Color light_get_color(RID p_light) = 0;
 	virtual bool light_get_reverse_cull_face_mode(RID p_light) const = 0;
 	virtual RSE::LightBakeMode light_get_bake_mode(RID p_light) = 0;

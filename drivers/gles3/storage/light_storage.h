@@ -69,6 +69,7 @@ struct Light {
 	Vector2 area_size = Vector2(1, 1);
 	bool area_normalize_energy = true;
 	RID area_texture;
+	float shadow_priority = 1.0f;
 	uint64_t version = 0;
 
 	Dependency dependency;
@@ -330,6 +331,7 @@ public:
 	virtual void light_set_negative(RID p_light, bool p_enable) override;
 	virtual void light_set_cull_mask(RID p_light, uint32_t p_mask) override;
 	virtual void light_set_distance_fade(RID p_light, bool p_enabled, float p_begin, float p_shadow, float p_length) override;
+	virtual void light_set_shadow_priority(RID p_light, float p_priority) override;
 	virtual void light_set_reverse_cull_face_mode(RID p_light, bool p_enabled) override;
 	virtual void light_set_shadow_caster_mask(RID p_light, uint32_t p_caster_mask) override;
 	virtual uint32_t light_get_shadow_caster_mask(RID p_light) const override;
@@ -367,6 +369,13 @@ public:
 		ERR_FAIL_NULL_V(light, 0);
 
 		return light->param[p_param];
+	}
+
+	virtual float light_get_shadow_priority(RID p_light) const override {
+		const Light *light = light_owner.get_or_null(p_light);
+		ERR_FAIL_NULL_V(light, 1.0f);
+
+		return light->shadow_priority;
 	}
 
 	_FORCE_INLINE_ RID light_get_projector(RID p_light) {

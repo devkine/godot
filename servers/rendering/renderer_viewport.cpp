@@ -50,6 +50,50 @@
 #include "servers/xr/xr_server.h"
 #endif // XR_DISABLED
 
+static bool _atom_debug_lights_and_shadows_enabled() {
+	return GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/debug/lights_and_shadows_enabled");
+}
+
+static void _atom_print_lights_and_shadows_stats(const RenderingServerTypes::RenderInfo &p_render_info) {
+	if (!_atom_debug_lights_and_shadows_enabled()) {
+		return;
+	}
+
+	if (GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/debug/print_light_stats")) {
+		print_line(vformat(
+				"Atom stats | lights vis3d=%d omni=%d spot=%d dir=%d shadow_cast=%d",
+				p_render_info.visible_3d_instances,
+				p_render_info.visible_omni_lights,
+				p_render_info.visible_spot_lights,
+				p_render_info.visible_directional_lights,
+				p_render_info.shadow_casting_lights_visible));
+	}
+
+	if (GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/debug/print_shadow_stats")) {
+		const float shadow_atlas_wasted = MAX(0.0f, 100.0f - p_render_info.shadow_atlas_usage);
+		print_line(vformat(
+				"Atom stats | shadows maps=%d skipped=%d budget=%d interval=%d offscreen=%d atlas=%.1f%% wasted=%.1f%% cpu_cull=%.2fms gpu=%.2fms",
+				p_render_info.shadow_maps_rendered,
+				p_render_info.skipped_shadow_updates,
+				p_render_info.skipped_shadow_updates_budget,
+				p_render_info.skipped_shadow_updates_interval,
+				p_render_info.skipped_shadow_updates_offscreen,
+				p_render_info.shadow_atlas_usage,
+				shadow_atlas_wasted,
+				p_render_info.cpu_cull_time_ms,
+				p_render_info.gpu_frame_time_ms));
+	}
+
+	if (GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/debug/print_cluster_stats")) {
+		print_line(vformat(
+				"Atom stats | clusters count=%d avg=%.2f max=%d overflow=%d",
+				p_render_info.cluster_count,
+				p_render_info.cluster_average_lights_per_non_empty_cluster,
+				p_render_info.cluster_max_lights,
+				p_render_info.cluster_overflow_count));
+	}
+}
+
 static Transform2D _canvas_get_transform(RendererViewport::Viewport *p_viewport, RendererCanvasCull::Canvas *p_canvas, RendererViewport::Viewport::CanvasData *p_canvas_data, const Vector2 &p_vp_size) {
 	Transform2D xf = p_viewport->global_transform;
 
@@ -1719,8 +1763,9 @@ void RendererViewport::handle_timestamp(String p_timestamp, uint64_t p_cpu_time,
 		viewport->time_cpu_end = p_cpu_time;
 		viewport->time_gpu_end = p_gpu_time;
 		viewport->render_info.gpu_frame_time_ms = viewport_get_measured_render_time_gpu(*vp);
+		_atom_print_lights_and_shadows_stats(viewport->render_info);
 		if (viewport->measure_render_time) {
-			print_line(vformat("Renderer stats | vis3d=%d omni=%d spot=%d dir=%d shadow_cast=%d shadow_maps=%d atlas=%.1f%% skipped=%d clusters=%d avg=%.2f max=%d overflow=%d cpu_cull=%.2fms gpu=%.2fms",
+			print_line(vformat("Renderer stats | vis3d=%d omni=%d spot=%d dir=%d shadow_cast=%d shadow_maps=%d atlas=%.1f%% skipped=%d budget=%d interval=%d offscreen=%d clusters=%d avg=%.2f max=%d overflow=%d cpu_cull=%.2fms gpu=%.2fms",
 				viewport->render_info.visible_3d_instances,
 				viewport->render_info.visible_omni_lights,
 				viewport->render_info.visible_spot_lights,
@@ -1729,6 +1774,9 @@ void RendererViewport::handle_timestamp(String p_timestamp, uint64_t p_cpu_time,
 				viewport->render_info.shadow_maps_rendered,
 				viewport->render_info.shadow_atlas_usage,
 				viewport->render_info.skipped_shadow_updates,
+				viewport->render_info.skipped_shadow_updates_budget,
+				viewport->render_info.skipped_shadow_updates_interval,
+				viewport->render_info.skipped_shadow_updates_offscreen,
 				viewport->render_info.cluster_count,
 				viewport->render_info.cluster_average_lights_per_non_empty_cluster,
 				viewport->render_info.cluster_max_lights,

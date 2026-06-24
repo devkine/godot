@@ -256,6 +256,13 @@ void LightStorage::light_set_distance_fade(RID p_light, bool p_enabled, float p_
 	light->distance_fade_length = p_length;
 }
 
+void LightStorage::light_set_shadow_priority(RID p_light, float p_priority) {
+	Light *light = light_owner.get_or_null(p_light);
+	ERR_FAIL_NULL(light);
+
+	light->shadow_priority = MAX(p_priority, 0.0f);
+}
+
 void LightStorage::light_set_reverse_cull_face_mode(RID p_light, bool p_enabled) {
 	Light *light = light_owner.get_or_null(p_light);
 	ERR_FAIL_NULL(light);

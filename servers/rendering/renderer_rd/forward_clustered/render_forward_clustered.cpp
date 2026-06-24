@@ -31,6 +31,7 @@
 #include "render_forward_clustered.h"
 
 #include "core/config/project_settings.h"
+#include "core/string/print_string.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
@@ -43,6 +44,33 @@
 #include "servers/rendering/storage/ltc_lut.gen.h"
 
 using namespace RendererSceneRenderImplementation;
+
+static bool _atom_cluster_debug_enabled() {
+	return GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/debug/lights_and_shadows_enabled") && GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/debug/print_cluster_stats");
+}
+
+static void _atom_print_cluster_pressure_warnings(const ClusterBuilderRD::DebugStats &p_cluster_stats, uint32_t p_cluster_max_elements) {
+	if (!_atom_cluster_debug_enabled() || p_cluster_max_elements == 0) {
+		return;
+	}
+
+	const uint32_t near_budget_threshold = MAX(uint32_t(1), uint32_t(Math::ceil(float(p_cluster_max_elements) * 0.8f)));
+	if (p_cluster_stats.overflow_count > 0) {
+		print_line(vformat(
+				"Atom warning | cluster overflow=%d max=%d budget=%d avg=%.2f",
+				p_cluster_stats.overflow_count,
+				p_cluster_stats.max_lights_in_cluster,
+				p_cluster_max_elements,
+				p_cluster_stats.average_lights_per_non_empty_cluster));
+	} else if (p_cluster_stats.max_lights_in_cluster >= near_budget_threshold) {
+		print_line(vformat(
+				"Atom warning | cluster pressure high max=%d budget=%d avg=%.2f threshold=%d",
+				p_cluster_stats.max_lights_in_cluster,
+				p_cluster_max_elements,
+				p_cluster_stats.average_lights_per_non_empty_cluster,
+				near_budget_threshold));
+	}
+}
 
 #define PRELOAD_PIPELINES_ON_SURFACE_CACHE_CONSTRUCTION 1
 
@@ -1680,6 +1708,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 				p_render_data->render_info->cluster_average_lights_per_non_empty_cluster = cluster_stats.average_lights_per_non_empty_cluster;
 				p_render_data->render_info->cluster_max_lights = cluster_stats.max_lights_in_cluster;
 				p_render_data->render_info->cluster_overflow_count = cluster_stats.overflow_count;
+				_atom_print_cluster_pressure_warnings(cluster_stats, p_render_data->cluster_max_elements);
 			}
 		}
 	}

@@ -3689,11 +3689,18 @@ void RenderingServer::init() {
 	GLOBAL_DEF("rendering/atom_forward_scale/light_behavior/enabled", false);
 	GLOBAL_DEF("rendering/atom_forward_scale/light_behavior/color_as_energy_filter", false);
 	GLOBAL_DEF("rendering/atom_forward_scale/light_behavior/debug_final_light_rgb", false);
+	GLOBAL_DEF("rendering/atom_forward_scale/debug/lights_and_shadows_enabled", false);
+	GLOBAL_DEF("rendering/atom_forward_scale/debug/print_light_stats", false);
+	GLOBAL_DEF("rendering/atom_forward_scale/debug/print_shadow_stats", false);
+	GLOBAL_DEF("rendering/atom_forward_scale/debug/print_cluster_stats", false);
 	GLOBAL_DEF("rendering/atom_forward_scale/shadow_budget/enabled", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/atom_forward_scale/shadow_budget/max_shadow_maps_per_frame", PROPERTY_HINT_RANGE, "0,16,1"), 16);
 	GLOBAL_DEF("rendering/atom_forward_scale/shadow_budget/static_light_cache_enabled", false);
 	GLOBAL_DEF("rendering/atom_forward_scale/shadow_budget/distance_priority_enabled", false);
 	GLOBAL_DEF("rendering/atom_forward_scale/shadow_budget/screen_size_priority_enabled", true);
+	GLOBAL_DEF("rendering/atom_forward_scale/shadow_budget/movement_priority_enabled", false);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/atom_forward_scale/shadow_budget/movement_priority_weight", PROPERTY_HINT_RANGE, "1,8,0.1,or_greater"), 2.0);
+	GLOBAL_DEF("rendering/atom_forward_scale/shadow_budget/offscreen_skip_enabled", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/atom_forward_scale/shadow_budget/min_update_interval_frames", PROPERTY_HINT_RANGE, "0,120,1,or_greater"), 0);
 
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/2d/shadow_atlas/size", PROPERTY_HINT_RANGE, "128,16384"), 2048);

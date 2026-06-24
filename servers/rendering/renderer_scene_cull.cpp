@@ -3363,12 +3363,18 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	uint32_t visible_spot_lights = 0;
 	uint32_t shadow_casting_lights_visible = 0;
 	uint32_t skipped_shadow_updates = 0;
+	uint32_t skipped_shadow_updates_budget = 0;
+	uint32_t skipped_shadow_updates_interval = 0;
+	uint32_t skipped_shadow_updates_offscreen = 0;
 	uint64_t cull_time_from = 0;
 	const bool shadow_budget_enabled = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/shadow_budget/enabled");
 	const uint32_t shadow_update_budget = shadow_budget_enabled ? MIN(uint32_t(MAX(int(GLOBAL_GET_CACHED(int, "rendering/atom_forward_scale/shadow_budget/max_shadow_maps_per_frame")), 0)), uint32_t(MAX_UPDATE_SHADOWS)) : uint32_t(MAX_UPDATE_SHADOWS);
 	const bool shadow_static_light_cache_enabled = shadow_budget_enabled && GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/shadow_budget/static_light_cache_enabled");
 	const bool shadow_distance_priority_enabled = shadow_budget_enabled && GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/shadow_budget/distance_priority_enabled");
 	const bool shadow_screen_size_priority_enabled = shadow_budget_enabled && GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/shadow_budget/screen_size_priority_enabled");
+	const bool shadow_movement_priority_enabled = shadow_budget_enabled && GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/shadow_budget/movement_priority_enabled");
+	const float shadow_movement_priority_weight = shadow_movement_priority_enabled ? MAX(1.0f, float(GLOBAL_GET_CACHED(double, "rendering/atom_forward_scale/shadow_budget/movement_priority_weight"))) : 1.0f;
+	const bool shadow_offscreen_skip_enabled = shadow_budget_enabled && GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/shadow_budget/offscreen_skip_enabled");
 	const uint32_t shadow_min_update_interval_frames = shadow_budget_enabled ? uint32_t(MAX(int(GLOBAL_GET_CACHED(int, "rendering/atom_forward_scale/shadow_budget/min_update_interval_frames")), 0)) : 0;
 	const uint32_t shadow_frame_number = uint32_t(RSG::rasterizer->get_frame_number());
 
@@ -3520,7 +3526,6 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			r_render_info->visible_directional_lights = visible_directional_lights;
 			r_render_info->shadow_casting_lights_visible = shadow_casting_lights_visible;
 			r_render_info->shadow_atlas_usage = p_shadow_atlas.is_valid() ? RSG::light_storage->shadow_atlas_get_usage(p_shadow_atlas) : 0.0f;
-			r_render_info->skipped_shadow_updates = skipped_shadow_updates;
 		}
 	}
 
@@ -3539,6 +3544,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				RSG::light_storage->light_instance_set_shadow_transform(cull.shadows[i].light_instance, c.projection, c.transform, c.zfar, c.split, j, c.shadow_texel_size, c.bias_scale, c.range_begin, c.uv_scale);
 				if (max_shadows_used == shadow_update_budget) {
 					skipped_shadow_updates++;
+					skipped_shadow_updates_budget++;
 					continue;
 				}
 				render_shadow_data[max_shadows_used].light = cull.shadows[i].light_instance;
@@ -3554,6 +3560,8 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			InstanceLightData *light = nullptr;
 			float coverage = 0.0f;
 			float distance_to_camera = 0.0f;
+			float movement_score = 1.0f;
+			float manual_priority_score = 1.0f;
 			uint32_t original_index = 0;
 			bool prefer_update = true;
 		};
@@ -3562,10 +3570,34 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			bool prefer_update_first = false;
 			bool use_screen_size_priority = true;
 			bool use_distance_priority = false;
+			bool use_movement_priority = false;
+
+			_FORCE_INLINE_ float _score(const PositionalShadowCandidate &p_candidate) const {
+				float score = 1.0f;
+				if (use_screen_size_priority) {
+					score *= MAX(p_candidate.coverage, 1e-4f);
+				}
+				if (use_distance_priority) {
+					score *= 1.0f / MAX(p_candidate.distance_to_camera, 0.001f);
+				}
+				if (use_movement_priority) {
+					score *= p_candidate.movement_score;
+				}
+				score *= p_candidate.manual_priority_score;
+				return score;
+			}
 
 			_FORCE_INLINE_ bool operator()(const PositionalShadowCandidate &p_a, const PositionalShadowCandidate &p_b) const {
 				if (prefer_update_first && p_a.prefer_update != p_b.prefer_update) {
 					return p_a.prefer_update && !p_b.prefer_update;
+				}
+
+				if (use_movement_priority) {
+					const float score_a = _score(p_a);
+					const float score_b = _score(p_b);
+					if (score_a != score_b) {
+						return score_a > score_b;
+					}
 				}
 
 				if (use_screen_size_priority && p_a.coverage != p_b.coverage) {
@@ -3694,16 +3726,19 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			candidate.light = light;
 			candidate.coverage = coverage;
 			candidate.distance_to_camera = ins->transform.origin.distance_to(camera_position);
+			candidate.movement_score = (light->is_shadow_dirty() || light->is_shadow_render_pending()) ? shadow_movement_priority_weight : 1.0f;
+			candidate.manual_priority_score = MAX(RSG::light_storage->light_get_shadow_priority(ins->base), 0.0f);
 			candidate.original_index = i;
 			candidate.prefer_update = light->is_shadow_dirty() || light->is_shadow_render_pending() || !(shadow_static_light_cache_enabled && light->bake_mode == RSE::LIGHT_BAKE_STATIC && light->get_shadow_render_frame_id() != UINT32_MAX);
 			positional_shadow_candidates.push_back(candidate);
 		}
 
-		if (shadow_budget_enabled && positional_shadow_candidates.size() > 1 && (shadow_static_light_cache_enabled || shadow_screen_size_priority_enabled || shadow_distance_priority_enabled)) {
+		if (shadow_budget_enabled && positional_shadow_candidates.size() > 1 && (shadow_static_light_cache_enabled || shadow_screen_size_priority_enabled || shadow_distance_priority_enabled || shadow_movement_priority_enabled)) {
 			SortArray<PositionalShadowCandidate, PositionalShadowCandidateSort> sorter;
 			sorter.compare.prefer_update_first = shadow_static_light_cache_enabled;
 			sorter.compare.use_screen_size_priority = shadow_screen_size_priority_enabled;
 			sorter.compare.use_distance_priority = shadow_distance_priority_enabled;
+			sorter.compare.use_movement_priority = shadow_movement_priority_enabled;
 			sorter.sort(positional_shadow_candidates.ptr(), positional_shadow_candidates.size());
 		}
 
@@ -3728,13 +3763,14 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			// We can detect whether multiple cameras are hitting this light, whether or not the shadow is dirty,
 			// so that we can turn off tighter caster culling.
 			light->detect_light_intersects_multiple_cameras(Engine::get_singleton()->get_frames_drawn());
+			bool light_intersects_camera_frustum = true;
 
-			if (light->is_shadow_dirty()) {
+			if (shadow_offscreen_skip_enabled || light->is_shadow_dirty()) {
 				// Dirty shadows have no need to be drawn if
 				// the light volume doesn't intersect the camera frustum.
 
 				// Returns false if the entire light can be culled.
-				bool allow_redraw = light_culler->prepare_regular_light(*ins);
+				light_intersects_camera_frustum = light_culler->prepare_regular_light(*ins);
 
 				// Directional lights aren't handled here, _light_instance_update_shadow is called from elsewhere.
 				// Checking for this in case this changes, as this is assumed.
@@ -3746,7 +3782,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				// There is however a cost to tighter shadow culling in this situation (2 shadow updates in 1 frame),
 				// so we should detect this and switch off tighter caster culling automatically.
 				// This is done in the logic for `decrement_shadow_dirty()`.
-				if (allow_redraw) {
+				if (light->is_shadow_dirty() && light_intersects_camera_frustum) {
 					light->last_version++;
 					light->decrement_shadow_dirty();
 				}
@@ -3757,6 +3793,14 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			if (redraw && shadow_min_update_interval_frames > 0 && light->get_shadow_render_frame_id() != UINT32_MAX && shadow_frame_number < light->get_shadow_render_frame_id() + shadow_min_update_interval_frames) {
 				redraw = false;
 				skipped_shadow_updates++;
+				skipped_shadow_updates_interval++;
+				light->set_shadow_render_pending(true);
+			}
+
+			if (redraw && shadow_offscreen_skip_enabled && !light_intersects_camera_frustum) {
+				redraw = false;
+				skipped_shadow_updates++;
+				skipped_shadow_updates_offscreen++;
 				light->set_shadow_render_pending(true);
 			}
 
@@ -3772,6 +3816,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			} else {
 				if (redraw) {
 					skipped_shadow_updates++;
+					skipped_shadow_updates_budget++;
 					light->set_shadow_render_pending(true);
 				}
 			}
@@ -3781,6 +3826,10 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 	if (r_render_info) {
 		r_render_info->shadow_maps_rendered = max_shadows_used;
+		r_render_info->skipped_shadow_updates = skipped_shadow_updates;
+		r_render_info->skipped_shadow_updates_budget = skipped_shadow_updates_budget;
+		r_render_info->skipped_shadow_updates_interval = skipped_shadow_updates_interval;
+		r_render_info->skipped_shadow_updates_offscreen = skipped_shadow_updates_offscreen;
 	}
 
 #ifdef DEV_ENABLED

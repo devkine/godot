@@ -244,6 +244,15 @@ Ref<Texture2D> Light3D::get_projector() const {
 	return projector;
 }
 
+void Light3D::set_shadow_priority(float p_priority) {
+	shadow_priority = MAX(p_priority, 0.0f);
+	RS::get_singleton()->light_set_shadow_priority(light, shadow_priority);
+}
+
+float Light3D::get_shadow_priority() const {
+	return shadow_priority;
+}
+
 void Light3D::owner_changed_notify() {
 	// For cases where owner changes _after_ entering tree (as example, editor editing).
 	_update_visibility();
@@ -398,6 +407,8 @@ void Light3D::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_projector", "projector"), &Light3D::set_projector);
 	ClassDB::bind_method(D_METHOD("get_projector"), &Light3D::get_projector);
+	ClassDB::bind_method(D_METHOD("set_shadow_priority", "priority"), &Light3D::set_shadow_priority);
+	ClassDB::bind_method(D_METHOD("get_shadow_priority"), &Light3D::get_shadow_priority);
 
 	ClassDB::bind_method(D_METHOD("set_temperature", "temperature"), &Light3D::set_temperature);
 	ClassDB::bind_method(D_METHOD("get_temperature"), &Light3D::get_temperature);

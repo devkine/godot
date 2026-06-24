@@ -227,6 +227,9 @@ struct RenderInfo {
 	int shadow_maps_rendered = 0;
 	float shadow_atlas_usage = 0.0f;
 	int skipped_shadow_updates = 0;
+	int skipped_shadow_updates_budget = 0;
+	int skipped_shadow_updates_interval = 0;
+	int skipped_shadow_updates_offscreen = 0;
 	int cluster_count = 0;
 	float cluster_average_lights_per_non_empty_cluster = 0.0f;
 	int cluster_max_lights = 0;

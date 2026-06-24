@@ -86,6 +86,7 @@ private:
 	Ref<Texture2D> projector;
 	Color correlated_color = Color(1.0, 1.0, 1.0);
 	float temperature = 6500.0;
+	float shadow_priority = 1.0;
 	// bind helpers
 
 	virtual void owner_changed_notify() override;
@@ -143,6 +144,8 @@ public:
 
 	void set_projector(const Ref<Texture2D> &p_texture);
 	Ref<Texture2D> get_projector() const;
+	void set_shadow_priority(float p_priority);
+	float get_shadow_priority() const;
 
 	void set_temperature(const float p_temperature);
 	float get_temperature() const;
