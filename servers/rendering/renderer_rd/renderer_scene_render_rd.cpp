@@ -32,6 +32,7 @@
 
 #include "core/config/project_settings.h"
 #include "core/io/image.h"
+#include "core/string/print_string.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/shaders/decal_data_inc.glsl.gen.h"
@@ -54,6 +55,27 @@ void get_vogel_disk(float *r_kernel, int p_sample_count) {
 		r_kernel[i * 4] = Math::cos(theta) * r;
 		r_kernel[i * 4 + 1] = Math::sin(theta) * r;
 	}
+}
+
+static void _print_atom_light_behavior_mode_once() {
+	static bool printed = false;
+	if (printed) {
+		return;
+	}
+	printed = true;
+
+	const bool atom_enabled = GLOBAL_GET("rendering/atom_forward_scale/light_behavior/enabled");
+	const bool atom_color_filter = GLOBAL_GET("rendering/atom_forward_scale/light_behavior/color_as_energy_filter");
+	const bool atom_debug_rgb = GLOBAL_GET("rendering/atom_forward_scale/light_behavior/debug_final_light_rgb");
+	const bool physical_light_units = GLOBAL_GET("rendering/lights_and_shadows/use_physical_light_units");
+
+	const char *mode = atom_enabled ? "AtomPhotometric" : "GodotClassic";
+	print_line(vformat(
+			"AtomPhotometric mode | mode=%s color_as_energy_filter=%s debug_final_light_rgb=%s use_physical_light_units=%s",
+			mode,
+			atom_color_filter ? "true" : "false",
+			atom_debug_rgb ? "true" : "false",
+			physical_light_units ? "true" : "false"));
 }
 
 RID RendererSceneRenderRD::sky_allocate() {
@@ -1822,6 +1844,7 @@ void RendererSceneRenderRD::init() {
 	RSG::camera_attributes->camera_attributes_set_dof_blur_bokeh_shape(RSE::DOFBokehShape(int(GLOBAL_GET("rendering/camera/depth_of_field/depth_of_field_bokeh_shape"))));
 	RSG::camera_attributes->camera_attributes_set_dof_blur_quality(RSE::DOFBlurQuality(int(GLOBAL_GET("rendering/camera/depth_of_field/depth_of_field_bokeh_quality"))), GLOBAL_GET("rendering/camera/depth_of_field/depth_of_field_use_jitter"));
 	use_physical_light_units = GLOBAL_GET("rendering/lights_and_shadows/use_physical_light_units");
+	_print_atom_light_behavior_mode_once();
 
 	screen_space_roughness_limiter = GLOBAL_GET("rendering/anti_aliasing/screen_space_roughness_limiter/enabled");
 	screen_space_roughness_limiter_amount = GLOBAL_GET("rendering/anti_aliasing/screen_space_roughness_limiter/amount");

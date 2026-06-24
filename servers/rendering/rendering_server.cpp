@@ -3686,6 +3686,9 @@ void RenderingServer::init() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/positional_shadow/soft_shadow_filter_quality", PROPERTY_HINT_ENUM, "Hard (Fastest),Soft Very Low (Faster),Soft Low (Fast),Soft Medium (Average),Soft High (Slow),Soft Ultra (Slowest)"), 2);
 	GLOBAL_DEF("rendering/lights_and_shadows/positional_shadow/soft_shadow_filter_quality.mobile", 0);
 	GLOBAL_DEF("rendering/lights_and_shadows/positional_shadow/atlas_16_bits", true);
+	GLOBAL_DEF("rendering/atom_forward_scale/light_behavior/enabled", false);
+	GLOBAL_DEF("rendering/atom_forward_scale/light_behavior/color_as_energy_filter", false);
+	GLOBAL_DEF("rendering/atom_forward_scale/light_behavior/debug_final_light_rgb", false);
 	GLOBAL_DEF("rendering/atom_forward_scale/shadow_budget/enabled", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/atom_forward_scale/shadow_budget/max_shadow_maps_per_frame", PROPERTY_HINT_RANGE, "0,16,1"), 16);
 	GLOBAL_DEF("rendering/atom_forward_scale/shadow_budget/static_light_cache_enabled", false);
