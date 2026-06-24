@@ -27,6 +27,18 @@ This is still Godot Forward+. It is not a renderer replacement, not deferred ren
 | Spot response | Standard Godot behavior | Optional solid-angle-relative spot scaling |
 | Debug RGB print | Not present | Optional visible-light RGB logging |
 
+## Visual Comparison
+
+Replace these placeholder paths with the real screenshot files when you place them in the repo.
+
+### Atom Inspired Fork
+
+![Godot 4 Atom Edition lighting comparison](docs/atom_forward_scale/images/atom_edition_placeholder.png)
+
+### Standard Godot 4
+
+![Standard Godot 4 lighting comparison](docs/atom_forward_scale/images/godot4_standard_placeholder.png)
+
 ## Hard Rules For This Fork
 
 - default Godot behavior must stay intact
