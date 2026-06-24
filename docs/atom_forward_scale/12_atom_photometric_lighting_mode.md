@@ -86,10 +86,12 @@
 
 - `rendering/atom_forward_scale/light_behavior/enabled=true` switches visible-light
   upload to explicit photometric helpers in `light_storage.cpp`.
-- Directional keeps lux-style scalar intensity.
-- Omni uses `candela = lumens / (4 * PI)`.
-- Spot uses `solid_angle = 2 * PI * (1 - cos(outer_angle))`, then
-  `candela = lumens / max(solid_angle, 1e-4)`.
+- Atom mode is normalized around Godot default light values so `light_energy = 1.0`
+  stays the practical base when Atom mode is enabled.
+- Directional base is normalized against default lux `100000`.
+- Omni base is normalized against default lumens `1000`.
+- Spot base is normalized against default lumens `1000` and default cone angle `45` degrees.
+- Spot still uses `solid_angle = 2 * PI * (1 - cos(outer_angle))`, but relative to the default 45 degree cone so narrower spots get brighter and wider spots get dimmer.
 - Disabled mode keeps current Godot upload behavior.
 
 ## Why Upload Path Is Best For Atom Mode

@@ -72,12 +72,20 @@ static void _atom_log_final_light_rgb(RSE::LightType p_type, uint32_t p_visible_
 
 #endif
 
+static constexpr float ATOM_DIRECTIONAL_BASE_INTENSITY = 100000.0f;
+static constexpr float ATOM_POSITIONAL_BASE_INTENSITY = 1000.0f;
+static constexpr float ATOM_SPOT_BASE_ANGLE_DEGREES = 45.0f;
+
+static float _atom_normalize_intensity(float p_intensity, float p_base_intensity) {
+	return p_intensity / MAX(p_base_intensity, 1e-4f);
+}
+
 static float _atom_photometric_directional_energy(float p_intensity) {
-	return p_intensity;
+	return _atom_normalize_intensity(p_intensity, ATOM_DIRECTIONAL_BASE_INTENSITY);
 }
 
 static float _atom_photometric_omni_energy(float p_intensity) {
-	return p_intensity / (Math::PI * 4.0f);
+	return _atom_normalize_intensity(p_intensity, ATOM_POSITIONAL_BASE_INTENSITY);
 }
 
 static float _atom_photometric_spot_solid_angle(float p_outer_angle_degrees) {
@@ -86,8 +94,9 @@ static float _atom_photometric_spot_solid_angle(float p_outer_angle_degrees) {
 }
 
 static float _atom_photometric_spot_energy(float p_intensity, float p_outer_angle_degrees) {
+	const float base_solid_angle = MAX(_atom_photometric_spot_solid_angle(ATOM_SPOT_BASE_ANGLE_DEGREES), 1e-4f);
 	const float solid_angle = MAX(_atom_photometric_spot_solid_angle(p_outer_angle_degrees), 1e-4f);
-	return p_intensity / solid_angle;
+	return _atom_normalize_intensity(p_intensity, ATOM_POSITIONAL_BASE_INTENSITY) * (base_solid_angle / solid_angle);
 }
 
 static float _get_light_energy_scalar(RSE::LightType p_type, float p_light_energy, float p_light_intensity, float p_spot_angle, bool p_negative, float p_fade, bool p_use_physical_light_units) {
@@ -109,7 +118,7 @@ static float _get_light_energy_scalar(RSE::LightType p_type, float p_light_energ
 					energy *= _atom_photometric_spot_energy(p_light_intensity, p_spot_angle);
 				} break;
 				case RSE::LIGHT_AREA: {
-					energy *= p_light_intensity / (Math::PI * 2.0f);
+					energy *= _atom_normalize_intensity(p_light_intensity, ATOM_POSITIONAL_BASE_INTENSITY);
 				} break;
 			}
 		} else {
