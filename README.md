@@ -53,6 +53,7 @@ This is still Godot Forward+. It is not a renderer replacement, not deferred ren
 - optional debug print of final visible-light RGB
 - Atom mode normalized so `light_energy = 1.0` stays the practical baseline when enabled
 - spot lights scale relative to cone solid angle from the default 45 degree baseline
+- in current manual test scenes, visible volumetric fog is practical with `Light3D.volumetric_fog_energy = 16`
 
 Main docs:
 

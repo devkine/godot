@@ -76,6 +76,10 @@ static constexpr float ATOM_DIRECTIONAL_BASE_INTENSITY = 100000.0f;
 static constexpr float ATOM_POSITIONAL_BASE_INTENSITY = 1000.0f;
 static constexpr float ATOM_SPOT_BASE_ANGLE_DEGREES = 45.0f;
 
+static bool _atom_light_behavior_enabled() {
+	return GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/light_behavior/enabled");
+}
+
 static float _atom_normalize_intensity(float p_intensity, float p_base_intensity) {
 	return p_intensity / MAX(p_base_intensity, 1e-4f);
 }
@@ -99,49 +103,65 @@ static float _atom_photometric_spot_energy(float p_intensity, float p_outer_angl
 	return _atom_normalize_intensity(p_intensity, ATOM_POSITIONAL_BASE_INTENSITY) * (base_solid_angle / solid_angle);
 }
 
-static float _get_light_energy_scalar(RSE::LightType p_type, float p_light_energy, float p_light_intensity, float p_spot_angle, bool p_negative, float p_fade, bool p_use_physical_light_units) {
-	const bool atom_photometric_enabled = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/light_behavior/enabled");
-	const bool use_photometric_energy = atom_photometric_enabled || p_use_physical_light_units;
+static float _get_atom_relative_light_energy_factor(RSE::LightType p_type, float p_light_intensity, float p_spot_angle) {
+	switch (p_type) {
+		case RSE::LIGHT_DIRECTIONAL: {
+			return _atom_photometric_directional_energy(p_light_intensity);
+		}
+		case RSE::LIGHT_OMNI: {
+			return _atom_photometric_omni_energy(p_light_intensity);
+		}
+		case RSE::LIGHT_SPOT: {
+			return _atom_photometric_spot_energy(p_light_intensity, p_spot_angle);
+		}
+		case RSE::LIGHT_AREA: {
+			return _atom_photometric_omni_energy(p_light_intensity);
+		}
+	}
+
+	return 1.0f;
+}
+
+static float _get_godot_light_baseline_scalar(RSE::LightType p_type, float p_light_intensity, bool p_use_physical_light_units) {
+	if (!p_use_physical_light_units) {
+		return Math::PI;
+	}
+
+	float energy = p_light_intensity;
+
+	switch (p_type) {
+		case RSE::LIGHT_DIRECTIONAL: {
+			break;
+		}
+		case RSE::LIGHT_OMNI: {
+			energy *= 1.0f / (Math::PI * 4.0f);
+		} break;
+		case RSE::LIGHT_AREA: {
+			energy *= 1.0f / (Math::PI * 2.0f);
+		} break;
+		case RSE::LIGHT_SPOT: {
+			// Godot classic physical-units spot path keeps intensity easy to control.
+			energy *= 1.0f / Math::PI;
+		} break;
+	}
+
+	return energy;
+}
+
+static float _get_atom_default_light_intensity(RSE::LightType p_type) {
+	return p_type == RSE::LIGHT_DIRECTIONAL ? ATOM_DIRECTIONAL_BASE_INTENSITY : ATOM_POSITIONAL_BASE_INTENSITY;
+}
+
+static float _get_final_light_energy_scalar(RSE::LightType p_type, float p_light_energy, float p_light_intensity, float p_spot_angle, bool p_negative, float p_fade, bool p_use_physical_light_units) {
+	const bool atom_light_behavior_enabled = _atom_light_behavior_enabled();
 
 	float energy = (p_negative ? -1.0f : 1.0f) * p_light_energy * p_fade;
 
-	if (use_photometric_energy) {
-		if (atom_photometric_enabled) {
-			switch (p_type) {
-				case RSE::LIGHT_DIRECTIONAL: {
-					energy *= _atom_photometric_directional_energy(p_light_intensity);
-				} break;
-				case RSE::LIGHT_OMNI: {
-					energy *= _atom_photometric_omni_energy(p_light_intensity);
-				} break;
-				case RSE::LIGHT_SPOT: {
-					energy *= _atom_photometric_spot_energy(p_light_intensity, p_spot_angle);
-				} break;
-				case RSE::LIGHT_AREA: {
-					energy *= _atom_normalize_intensity(p_light_intensity, ATOM_POSITIONAL_BASE_INTENSITY);
-				} break;
-			}
-		} else {
-			energy *= p_light_intensity;
-
-			switch (p_type) {
-				case RSE::LIGHT_DIRECTIONAL: {
-					break;
-				}
-				case RSE::LIGHT_OMNI: {
-					energy *= 1.0f / (Math::PI * 4.0f);
-				} break;
-				case RSE::LIGHT_AREA: {
-					energy *= 1.0f / (Math::PI * 2.0f);
-				} break;
-				case RSE::LIGHT_SPOT: {
-					// Godot classic physical-units spot path keeps intensity easy to control.
-					energy *= 1.0f / Math::PI;
-				} break;
-			}
-		}
+	if (atom_light_behavior_enabled) {
+		energy *= _get_godot_light_baseline_scalar(p_type, _get_atom_default_light_intensity(p_type), p_use_physical_light_units);
+		energy *= _get_atom_relative_light_energy_factor(p_type, p_light_intensity, p_spot_angle);
 	} else {
-		energy *= Math::PI;
+		energy *= _get_godot_light_baseline_scalar(p_type, p_light_intensity, p_use_physical_light_units);
 	}
 
 	return energy;
@@ -866,7 +886,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				light_data.direction[1] = direction.y;
 				light_data.direction[2] = direction.z;
 
-				light_data.energy = _get_light_energy_scalar(light->type, light->param[RSE::LIGHT_PARAM_ENERGY], light->param[RSE::LIGHT_PARAM_INTENSITY], 0.0f, light->negative, 1.0f, RendererSceneRenderRD::get_singleton()->is_using_physical_light_units());
+				light_data.energy = _get_final_light_energy_scalar(light->type, light->param[RSE::LIGHT_PARAM_ENERGY], light->param[RSE::LIGHT_PARAM_INTENSITY], 0.0f, light->negative, 1.0f, RendererSceneRenderRD::get_singleton()->is_using_physical_light_units());
 
 				if (p_render_data->camera_attributes.is_valid()) {
 					light_data.energy *= RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
@@ -1137,7 +1157,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			}
 		}
 
-		float energy = _get_light_energy_scalar(type, light->param[RSE::LIGHT_PARAM_ENERGY], light->param[RSE::LIGHT_PARAM_INTENSITY], light->param[RSE::LIGHT_PARAM_SPOT_ANGLE], light->negative, fade, RendererSceneRenderRD::get_singleton()->is_using_physical_light_units());
+		float energy = _get_final_light_energy_scalar(type, light->param[RSE::LIGHT_PARAM_ENERGY], light->param[RSE::LIGHT_PARAM_INTENSITY], light->param[RSE::LIGHT_PARAM_SPOT_ANGLE], light->negative, fade, RendererSceneRenderRD::get_singleton()->is_using_physical_light_units());
 
 		if (p_render_data->camera_attributes.is_valid()) {
 			energy *= RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
@@ -1194,9 +1214,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		}
 
 #ifdef DEBUG_ENABLED
-		if (type == RSE::LIGHT_OMNI || type == RSE::LIGHT_SPOT) {
-			_atom_log_final_light_rgb(type, index, Vector3(light_data.color[0], light_data.color[1], light_data.color[2]));
-		}
+		_atom_log_final_light_rgb(type, index, Vector3(light_data.color[0], light_data.color[1], light_data.color[2]));
 #endif
 
 		light_data.mask = light->cull_mask;

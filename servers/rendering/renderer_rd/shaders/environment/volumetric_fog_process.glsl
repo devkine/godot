@@ -397,6 +397,7 @@ void main() {
 
 	if (total_density > 0.00005) {
 		for (uint i = 0; i < params.directional_light_count; i++) {
+			// Atom light behavior is already baked into DirectionalLightData.energy and LightData.color by LightStorage.
 			if (directional_lights.data[i].volumetric_fog_energy > 0.001) {
 				vec3 shadow_attenuation = vec3(1.0);
 
