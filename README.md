@@ -59,6 +59,10 @@ Main docs:
 
 - `docs/atom_forward_scale/12_atom_photometric_lighting_mode.md`
 
+Downloads:
+
+- [Windows editor release bundle](bin/godot.windows.editor.x86_64.release.zip?raw=1)
+
 ### Large Scene Light / Shadow Diagnostics
 
 - project settings under `rendering/atom_forward_scale/debug/*`
@@ -100,7 +104,13 @@ This is currently script/API-only. No inspector property yet.
 
 ## Build
 
-Windows editor build used on this branch:
+Windows release editor build used on this branch:
+
+```text
+scons platform=windows target=editor d3d12=no compiledb=yes -j%NUMBER_OF_PROCESSORS%
+```
+
+Windows dev editor build used during renderer work:
 
 ```text
 scons platform=windows target=editor dev_build=yes debug_symbols=yes d3d12=no compiledb=yes -j%NUMBER_OF_PROCESSORS%
@@ -108,6 +118,9 @@ scons platform=windows target=editor dev_build=yes debug_symbols=yes d3d12=no co
 
 Output binaries:
 
+- `bin/godot.windows.editor.x86_64.exe`
+- `bin/godot.windows.editor.x86_64.console.exe`
+- `bin/godot.windows.editor.x86_64.release.zip`
 - `bin/godot.windows.editor.dev.x86_64.exe`
 - `bin/godot.windows.editor.dev.x86_64.console.exe`
 

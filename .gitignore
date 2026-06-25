@@ -30,6 +30,9 @@
 
 # Buildsystem
 bin
+!bin/
+bin/*
+!bin/godot.windows.editor.x86_64.release.zip
 *.gen.*
 compile_commands.json
 platform/windows/godot_res.res
