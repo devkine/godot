@@ -39,6 +39,67 @@
 
 using namespace RendererRD;
 
+namespace {
+
+constexpr uint32_t ATOM_DEBUG_MAX_LIGHT_LOGS_PER_FRAME = 8;
+
+const char *atom_light_type_name(RSE::LightType p_type) {
+	switch (p_type) {
+		case RSE::LIGHT_DIRECTIONAL:
+			return "DirectionalLight3D";
+		case RSE::LIGHT_OMNI:
+			return "OmniLight3D";
+		case RSE::LIGHT_SPOT:
+			return "SpotLight3D";
+		case RSE::LIGHT_AREA:
+			return "AreaLight3D";
+		default:
+			return "UnknownLight";
+	}
+}
+
+bool atom_light_debug_can_log(bool p_enabled) {
+	if (!p_enabled) {
+		return false;
+	}
+
+	static uint64_t last_frame = UINT64_MAX;
+	static uint32_t logged_count = 0;
+	const uint64_t frame = RSG::rasterizer->get_frame_number();
+	if (frame != last_frame) {
+		last_frame = frame;
+		logged_count = 0;
+	}
+
+	if (logged_count >= ATOM_DEBUG_MAX_LIGHT_LOGS_PER_FRAME) {
+		return false;
+	}
+
+	logged_count++;
+	return true;
+}
+
+void atom_log_final_light(RSE::LightType p_type, uint32_t p_visible_index, const Color &p_final_rgb, float p_scalar_energy, float p_light_energy, float p_intensity, bool p_use_physical_light_units, bool p_negative, bool p_distance_fade, float p_distance_fade_begin, float p_distance_fade_shadow, float p_distance_fade_length, float p_spot_angle) {
+	print_line(vformat("[AtomLightDebug] type=%s visible_index=%d final_rgb=(%.6f, %.6f, %.6f) final_scalar_energy=%.6f light_energy=%.6f light_intensity=%.6f physical_light_units=%s negative=%s distance_fade=%s distance_fade_begin=%.6f distance_fade_shadow=%.6f distance_fade_length=%.6f spot_angle=%.6f",
+			atom_light_type_name(p_type),
+			p_visible_index,
+			p_final_rgb.r,
+			p_final_rgb.g,
+			p_final_rgb.b,
+			p_scalar_energy,
+			p_light_energy,
+			p_intensity,
+			p_use_physical_light_units ? "true" : "false",
+			p_negative ? "true" : "false",
+			p_distance_fade ? "true" : "false",
+			p_distance_fade_begin,
+			p_distance_fade_shadow,
+			p_distance_fade_length,
+			p_spot_angle));
+}
+
+} // namespace
+
 LightStorage *LightStorage::singleton = nullptr;
 
 LightStorage *LightStorage::get_singleton() {
@@ -714,6 +775,8 @@ void LightStorage::set_max_lights(const uint32_t p_max_lights) {
 void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const PagedArray<RID> &p_lights, const Transform3D &p_camera_transform, RID p_shadow_atlas, bool p_using_shadows, uint32_t &r_directional_light_count, uint32_t &r_positional_light_count, bool &r_directional_light_soft_shadows) {
 	ForwardIDStorage *forward_id_storage = ForwardIDStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+	const bool atom_debug_final_light_rgb = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/light_behavior/debug_final_light_rgb");
+	const bool use_physical_light_units = RendererSceneRenderRD::get_singleton()->is_using_physical_light_units();
 
 	Transform3D inverse_transform = p_camera_transform.affine_inverse();
 
@@ -755,7 +818,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 				light_data.energy = sign * light->param[RSE::LIGHT_PARAM_ENERGY];
 
-				if (RendererSceneRenderRD::get_singleton()->is_using_physical_light_units()) {
+				if (use_physical_light_units) {
 					light_data.energy *= light->param[RSE::LIGHT_PARAM_INTENSITY];
 				} else {
 					light_data.energy *= Math::PI;
@@ -769,6 +832,10 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				light_data.color[0] = linear_col.r;
 				light_data.color[1] = linear_col.g;
 				light_data.color[2] = linear_col.b;
+
+				if (atom_light_debug_can_log(atom_debug_final_light_rgb)) {
+					atom_log_final_light(light->type, r_directional_light_count, linear_col, light_data.energy, light->param[RSE::LIGHT_PARAM_ENERGY], light->param[RSE::LIGHT_PARAM_INTENSITY], use_physical_light_units, light->negative, light->distance_fade, light->distance_fade_begin, light->distance_fade_shadow, light->distance_fade_length, 0.0f);
+				}
 
 				light_data.specular = light->param[RSE::LIGHT_PARAM_SPECULAR];
 				light_data.volumetric_fog_energy = light->param[RSE::LIGHT_PARAM_VOLUMETRIC_FOG_ENERGY];
@@ -1029,7 +1096,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 		float energy = sign * light->param[RSE::LIGHT_PARAM_ENERGY] * fade;
 
-		if (RendererSceneRenderRD::get_singleton()->is_using_physical_light_units()) {
+		if (use_physical_light_units) {
 			energy *= light->param[RSE::LIGHT_PARAM_INTENSITY];
 
 			// Convert from Luminous Power to Luminous Intensity
@@ -1053,6 +1120,9 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		light_data.color[0] = linear_col.r * energy;
 		light_data.color[1] = linear_col.g * energy;
 		light_data.color[2] = linear_col.b * energy;
+		if (atom_light_debug_can_log(atom_debug_final_light_rgb)) {
+			atom_log_final_light(type, index, Color(light_data.color[0], light_data.color[1], light_data.color[2]), energy, light->param[RSE::LIGHT_PARAM_ENERGY], light->param[RSE::LIGHT_PARAM_INTENSITY], use_physical_light_units, light->negative, light->distance_fade, light->distance_fade_begin, light->distance_fade_shadow, light->distance_fade_length, type == RSE::LIGHT_SPOT ? light->param[RSE::LIGHT_PARAM_SPOT_ANGLE] : 0.0f);
+		}
 		light_data.specular_amount = light->param[RSE::LIGHT_PARAM_SPECULAR] * 2.0;
 		light_data.volumetric_fog_energy = light->param[RSE::LIGHT_PARAM_VOLUMETRIC_FOG_ENERGY];
 		light_data.bake_mode = light->bake_mode;
