@@ -111,6 +111,10 @@ float atom_exposure_normalization(RenderDataRD *p_render_data) {
 	return 1.0f;
 }
 
+float atom_filmic_exposure_multiplier(float p_bias) {
+	return Math::pow(2.0f, p_bias);
+}
+
 float atom_default_intensity_scale(float p_intensity, float p_default_intensity, bool p_normalize_default_intensities) {
 	if (!p_normalize_default_intensities) {
 		return p_intensity;
@@ -831,8 +835,10 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 	const bool atom_debug_final_light_rgb = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/light_behavior/debug_final_light_rgb");
 	const bool atom_enabled = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/light_behavior/enabled");
 	const bool atom_normalize_default_intensities = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/light_behavior/normalize_default_intensities");
+	const float atom_filmic_exposure_bias = GLOBAL_GET_CACHED(float, "rendering/atom_forward_scale/light_behavior/filmic_exposure_bias");
 	const bool use_physical_light_units = RendererSceneRenderRD::get_singleton()->is_using_physical_light_units();
 	const float exposure_normalization = atom_exposure_normalization(p_render_data);
+	const float atom_exposure_multiplier = atom_filmic_exposure_multiplier(atom_filmic_exposure_bias);
 
 	Transform3D inverse_transform = p_camera_transform.affine_inverse();
 
@@ -874,6 +880,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 				if (atom_enabled) {
 					light_data.energy = atom_directional_energy(light->param[RSE::LIGHT_PARAM_ENERGY], light->param[RSE::LIGHT_PARAM_INTENSITY], sign, exposure_normalization, atom_normalize_default_intensities);
+					light_data.energy *= atom_exposure_multiplier;
 				} else {
 					light_data.energy = sign * light->param[RSE::LIGHT_PARAM_ENERGY];
 
@@ -1157,9 +1164,11 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			switch (type) {
 				case RSE::LIGHT_OMNI:
 					energy = atom_omni_energy(light->param[RSE::LIGHT_PARAM_ENERGY], light->param[RSE::LIGHT_PARAM_INTENSITY], sign, fade, exposure_normalization, atom_normalize_default_intensities);
+					energy *= atom_exposure_multiplier;
 					break;
 				case RSE::LIGHT_SPOT:
 					energy = atom_spot_energy(light->param[RSE::LIGHT_PARAM_ENERGY], light->param[RSE::LIGHT_PARAM_INTENSITY], light->param[RSE::LIGHT_PARAM_SPOT_ANGLE], sign, fade, exposure_normalization, atom_normalize_default_intensities);
+					energy *= atom_exposure_multiplier;
 					break;
 				default:
 					energy = sign * light->param[RSE::LIGHT_PARAM_ENERGY] * fade;
