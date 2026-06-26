@@ -1774,6 +1774,7 @@ void fragment() {)";
 	if (features[FEATURE_EMISSION]) {
 		const bool atom_emission_enabled = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/enabled");
 		const bool atom_emission_texture_as_energy_filter = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/emission_texture_as_energy_filter");
+		const bool has_emission_texture = textures[TEXTURE_EMISSION].is_valid();
 		code += R"(
 	// Emission: Enabled
 )";
@@ -1791,7 +1792,7 @@ void fragment() {)";
 			}
 		}
 
-		if (atom_emission_enabled && atom_emission_texture_as_energy_filter) {
+		if (atom_emission_enabled && atom_emission_texture_as_energy_filter && has_emission_texture) {
 			code += R"(	vec3 atom_emission_base = emission.rgb;
 	if (dot(atom_emission_base, atom_emission_base) <= 0.000001) {
 		// Keep texture-only emissive materials usable when emission color stays at Godot's default black.

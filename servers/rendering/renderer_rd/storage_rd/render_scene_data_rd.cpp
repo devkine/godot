@@ -260,7 +260,7 @@ void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RSE::ViewportDebugDraw 
 
 	ubo.atom_emission_default_nits = GLOBAL_GET_CACHED(float, "rendering/atom_forward_scale/emission_behavior/default_emission_nits");
 	ubo.atom_emission_max_nits = GLOBAL_GET_CACHED(float, "rendering/atom_forward_scale/emission_behavior/max_emission_nits");
-	ubo.atom_emission_filmic_exposure_multiplier = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/filmic_emission_response") ? Math::pow(2.0f, GLOBAL_GET_CACHED(float, "rendering/atom_forward_scale/light_behavior/filmic_exposure_bias")) : 1.0f;
+	ubo.atom_emission_filmic_exposure_multiplier = 1.0f;
 	ubo.atom_emission_flags = 0;
 	if (GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/enabled")) {
 		ubo.atom_emission_flags |= 1 << 0;

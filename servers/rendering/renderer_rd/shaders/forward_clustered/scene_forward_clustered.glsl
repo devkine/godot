@@ -1097,19 +1097,43 @@ vec3 atom_apply_emission_energy_filter(vec3 p_emission_color, vec3 p_emission_te
 	return p_emission_color * p_emission_texture;
 }
 
-vec3 atom_apply_filmic_emission_bias(vec3 p_emission) {
-	return p_emission * scene_data_block.data.atom_emission_filmic_exposure_multiplier;
+vec3 atom_cap_emission_preserve_hue(vec3 p_emission) {
+	float peak = max(max(p_emission.r, p_emission.g), p_emission.b);
+	if (peak <= scene_data_block.data.atom_emission_max_nits) {
+		return p_emission;
+	}
+
+	return p_emission * (scene_data_block.data.atom_emission_max_nits / peak);
 }
 
-vec3 atom_apply_shared_emission_response(vec3 p_emission) {
+vec3 atom_apply_filmic_emission_bias(vec3 p_emission) {
+	float peak = max(max(p_emission.r, p_emission.g), p_emission.b);
+	if (peak <= 0.0) {
+		return p_emission;
+	}
+
+	float soft_knee = max(scene_data_block.data.atom_emission_default_nits * scene_data_block.data.atom_emission_filmic_exposure_multiplier, 0.001);
+	if (peak <= soft_knee) {
+		return p_emission;
+	}
+
+	float range = max(scene_data_block.data.atom_emission_max_nits - soft_knee, 0.001);
+	float over = peak - soft_knee;
+	float compressed_peak = soft_knee + over / (1.0 + over / range);
+	return p_emission * (compressed_peak / peak);
+}
+
+vec3 atom_apply_shared_emission_response(vec3 p_emission, float p_alpha) {
 	if (!atom_emission_enabled()) {
 		return p_emission;
 	}
 
-	p_emission = clamp(p_emission, vec3(0.0), vec3(scene_data_block.data.atom_emission_max_nits));
+	p_emission *= clamp(p_alpha, 0.0, 1.0);
+	p_emission = max(p_emission, vec3(0.0));
 	if (bool(scene_data_block.data.atom_emission_flags & ATOM_EMISSION_FLAG_FILMIC_RESPONSE)) {
 		p_emission = atom_apply_filmic_emission_bias(p_emission);
 	}
+	p_emission = atom_cap_emission_preserve_hue(p_emission);
 	return p_emission;
 }
 
@@ -1720,7 +1744,7 @@ void fragment_shader(in SceneData scene_data) {
 #ifndef MODE_UNSHADED
 	// Used in regular draw pass and when drawing SDFs for SDFGI and materials for VoxelGI.
 	emission *= scene_data.emissive_exposure_normalization;
-	emission = atom_apply_shared_emission_response(emission);
+	emission = atom_apply_shared_emission_response(emission, alpha);
 #endif
 
 #if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
