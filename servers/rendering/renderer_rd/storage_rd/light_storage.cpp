@@ -126,8 +126,8 @@ float atom_default_intensity_scale(float p_intensity, float p_default_intensity,
 float atom_spot_cone_factor(float p_spot_angle_degrees) {
 	const float outer_angle_radians = Math::deg_to_rad(p_spot_angle_degrees);
 	const float default_outer_angle_radians = Math::deg_to_rad(ATOM_SPOT_DEFAULT_ANGLE_DEGREES);
-	const float solid_angle = 2.0f * Math_PI * (1.0f - Math::cos(outer_angle_radians));
-	const float default_solid_angle = 2.0f * Math_PI * (1.0f - Math::cos(default_outer_angle_radians));
+	const float solid_angle = 2.0f * Math::PI * (1.0f - Math::cos(outer_angle_radians));
+	const float default_solid_angle = 2.0f * Math::PI * (1.0f - Math::cos(default_outer_angle_radians));
 	return default_solid_angle / MAX(solid_angle, ATOM_SPOT_SOLID_ANGLE_EPSILON);
 }
 
