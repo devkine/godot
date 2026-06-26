@@ -37,6 +37,24 @@
 #include "scene/main/scene_tree.h"
 #include "servers/rendering/rendering_server.h"
 
+void Light3D::_update_renderer_color() {
+	if (!GLOBAL_GET_CACHED(bool, "rendering/lights_and_shadows/use_physical_light_units")) {
+		RS::get_singleton()->light_set_color(light, color);
+		return;
+	}
+
+	const bool atom_enabled = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/light_behavior/enabled");
+	const bool atom_color_as_energy_filter = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/light_behavior/color_as_energy_filter");
+	Color combined = color.srgb_to_linear() * correlated_color.srgb_to_linear();
+
+	if (atom_enabled && atom_color_as_energy_filter) {
+		RS::get_singleton()->light_set_color(light, combined.linear_to_srgb());
+		return;
+	}
+
+	RS::get_singleton()->light_set_color(light, combined.linear_to_srgb());
+}
+
 void Light3D::set_param(Param p_param, real_t p_value) {
 	ERR_FAIL_INDEX(p_param, PARAM_MAX);
 	param[p_param] = p_value;
@@ -125,14 +143,7 @@ uint32_t Light3D::get_cull_mask() const {
 
 void Light3D::set_color(const Color &p_color) {
 	color = p_color;
-
-	if (GLOBAL_GET_CACHED(bool, "rendering/lights_and_shadows/use_physical_light_units")) {
-		Color combined = color.srgb_to_linear();
-		combined *= correlated_color.srgb_to_linear();
-		RS::get_singleton()->light_set_color(light, combined.linear_to_srgb());
-	} else {
-		RS::get_singleton()->light_set_color(light, color);
-	}
+	_update_renderer_color();
 	// The gizmo color depends on the light color, so update it.
 	update_gizmos();
 }
@@ -273,10 +284,7 @@ void Light3D::set_temperature(const float p_temperature) {
 		return;
 	}
 	correlated_color = _color_from_temperature(temperature);
-
-	Color combined = color.srgb_to_linear() * correlated_color.srgb_to_linear();
-
-	RS::get_singleton()->light_set_color(light, combined.linear_to_srgb());
+	_update_renderer_color();
 	// The gizmo color depends on the light color, so update it.
 	update_gizmos();
 }

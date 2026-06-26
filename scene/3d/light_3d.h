@@ -82,6 +82,7 @@ private:
 	RSE::LightType type = RSE::LIGHT_DIRECTIONAL;
 	bool editor_only = false;
 	void _update_visibility();
+	void _update_renderer_color();
 	BakeMode bake_mode = BAKE_DYNAMIC;
 	Ref<Texture2D> projector;
 	Color correlated_color = Color(1.0, 1.0, 1.0);
