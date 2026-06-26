@@ -1772,6 +1772,8 @@ void fragment() {)";
 	}
 
 	if (features[FEATURE_EMISSION]) {
+		const bool atom_emission_enabled = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/enabled");
+		const bool atom_emission_texture_as_energy_filter = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/emission_texture_as_energy_filter");
 		code += R"(
 	// Emission: Enabled
 )";
@@ -1789,20 +1791,25 @@ void fragment() {)";
 			}
 		}
 
-		code += R"(	if (atom_emission_enabled() && atom_emission_texture_as_energy_filter()) {
-		EMISSION = atom_apply_emission_energy_filter(emission.rgb, emission_tex) * atom_resolve_emission_energy(emission_energy);
-	} else {
-)";
-		if (emission_op == EMISSION_OP_ADD) {
-			code += R"(		// Emission Operator: Add
-		EMISSION = (emission.rgb + emission_tex) * emission_energy;
+		if (atom_emission_enabled && atom_emission_texture_as_energy_filter) {
+			code += R"(	vec3 atom_emission_base = emission.rgb;
+	if (dot(atom_emission_base, atom_emission_base) <= 0.000001) {
+		// Keep texture-only emissive materials usable when emission color stays at Godot's default black.
+		atom_emission_base = vec3(1.0);
+	}
+	EMISSION = (atom_emission_base * emission_tex) * emission_energy;
 )";
 		} else {
-			code += R"(		// Emission Operator: Multiply
-		EMISSION = (emission.rgb * emission_tex) * emission_energy;
+			if (emission_op == EMISSION_OP_ADD) {
+				code += R"(	// Emission Operator: Add
+	EMISSION = (emission.rgb + emission_tex) * emission_energy;
 )";
+			} else {
+				code += R"(	// Emission Operator: Multiply
+	EMISSION = (emission.rgb * emission_tex) * emission_energy;
+)";
+			}
 		}
-		code += "\t}\n";
 	}
 
 	if (features[FEATURE_REFRACTION]) {
