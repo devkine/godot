@@ -42,6 +42,11 @@ using namespace RendererRD;
 namespace {
 
 constexpr uint32_t ATOM_DEBUG_MAX_LIGHT_LOGS_PER_FRAME = 8;
+constexpr float ATOM_DIRECTIONAL_DEFAULT_LUX = 100000.0f;
+constexpr float ATOM_OMNI_DEFAULT_LUMENS = 1000.0f;
+constexpr float ATOM_SPOT_DEFAULT_LUMENS = 1000.0f;
+constexpr float ATOM_SPOT_DEFAULT_ANGLE_DEGREES = 45.0f;
+constexpr float ATOM_SPOT_SOLID_ANGLE_EPSILON = 1e-4f;
 
 const char *atom_light_type_name(RSE::LightType p_type) {
 	switch (p_type) {
@@ -96,6 +101,54 @@ void atom_log_final_light(RSE::LightType p_type, uint32_t p_visible_index, const
 			p_distance_fade_shadow,
 			p_distance_fade_length,
 			p_spot_angle));
+}
+
+float atom_exposure_normalization(RenderDataRD *p_render_data) {
+	if (p_render_data->camera_attributes.is_valid()) {
+		return RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
+	}
+
+	return 1.0f;
+}
+
+float atom_default_intensity_scale(float p_intensity, float p_default_intensity, bool p_normalize_default_intensities) {
+	if (!p_normalize_default_intensities) {
+		return p_intensity;
+	}
+
+	return p_intensity / p_default_intensity;
+}
+
+float atom_spot_cone_factor(float p_spot_angle_degrees) {
+	const float outer_angle_radians = Math::deg_to_rad(p_spot_angle_degrees);
+	const float default_outer_angle_radians = Math::deg_to_rad(ATOM_SPOT_DEFAULT_ANGLE_DEGREES);
+	const float solid_angle = 2.0f * Math_PI * (1.0f - Math::cos(outer_angle_radians));
+	const float default_solid_angle = 2.0f * Math_PI * (1.0f - Math::cos(default_outer_angle_radians));
+	return default_solid_angle / MAX(solid_angle, ATOM_SPOT_SOLID_ANGLE_EPSILON);
+}
+
+float atom_directional_energy(float p_light_energy, float p_intensity, float p_sign, float p_exposure_normalization, bool p_normalize_default_intensities) {
+	return p_light_energy *
+			p_sign *
+			p_exposure_normalization *
+			atom_default_intensity_scale(p_intensity, ATOM_DIRECTIONAL_DEFAULT_LUX, p_normalize_default_intensities);
+}
+
+float atom_omni_energy(float p_light_energy, float p_intensity, float p_sign, float p_fade, float p_exposure_normalization, bool p_normalize_default_intensities) {
+	return p_light_energy *
+			p_sign *
+			p_fade *
+			p_exposure_normalization *
+			atom_default_intensity_scale(p_intensity, ATOM_OMNI_DEFAULT_LUMENS, p_normalize_default_intensities);
+}
+
+float atom_spot_energy(float p_light_energy, float p_intensity, float p_spot_angle_degrees, float p_sign, float p_fade, float p_exposure_normalization, bool p_normalize_default_intensities) {
+	return p_light_energy *
+			p_sign *
+			p_fade *
+			p_exposure_normalization *
+			atom_default_intensity_scale(p_intensity, ATOM_SPOT_DEFAULT_LUMENS, p_normalize_default_intensities) *
+			atom_spot_cone_factor(p_spot_angle_degrees);
 }
 
 } // namespace
@@ -776,7 +829,10 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 	ForwardIDStorage *forward_id_storage = ForwardIDStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 	const bool atom_debug_final_light_rgb = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/light_behavior/debug_final_light_rgb");
+	const bool atom_enabled = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/light_behavior/enabled");
+	const bool atom_normalize_default_intensities = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/light_behavior/normalize_default_intensities");
 	const bool use_physical_light_units = RendererSceneRenderRD::get_singleton()->is_using_physical_light_units();
+	const float exposure_normalization = atom_exposure_normalization(p_render_data);
 
 	Transform3D inverse_transform = p_camera_transform.affine_inverse();
 
@@ -816,16 +872,18 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 				float sign = light->negative ? -1 : 1;
 
-				light_data.energy = sign * light->param[RSE::LIGHT_PARAM_ENERGY];
-
-				if (use_physical_light_units) {
-					light_data.energy *= light->param[RSE::LIGHT_PARAM_INTENSITY];
+				if (atom_enabled) {
+					light_data.energy = atom_directional_energy(light->param[RSE::LIGHT_PARAM_ENERGY], light->param[RSE::LIGHT_PARAM_INTENSITY], sign, exposure_normalization, atom_normalize_default_intensities);
 				} else {
-					light_data.energy *= Math::PI;
-				}
+					light_data.energy = sign * light->param[RSE::LIGHT_PARAM_ENERGY];
 
-				if (p_render_data->camera_attributes.is_valid()) {
-					light_data.energy *= RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
+					if (use_physical_light_units) {
+						light_data.energy *= light->param[RSE::LIGHT_PARAM_INTENSITY];
+					} else {
+						light_data.energy *= Math::PI;
+					}
+
+					light_data.energy *= exposure_normalization;
 				}
 
 				Color linear_col = light->color.srgb_to_linear();
@@ -1094,27 +1152,39 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			}
 		}
 
-		float energy = sign * light->param[RSE::LIGHT_PARAM_ENERGY] * fade;
-
-		if (use_physical_light_units) {
-			energy *= light->param[RSE::LIGHT_PARAM_INTENSITY];
-
-			// Convert from Luminous Power to Luminous Intensity
-			if (type == RSE::LIGHT_OMNI) {
-				energy *= 1.0 / (Math::PI * 4.0);
-			} else if (type == RSE::LIGHT_AREA) {
-				energy *= 1.0 / (Math::PI * 2.0);
-			} else {
-				// Spot Lights are not physically accurate, Luminous Intensity should change in relation to the cone angle.
-				// We make this assumption to keep them easy to control.
-				energy *= 1.0 / Math::PI;
+		float energy;
+		if (atom_enabled && type != RSE::LIGHT_AREA) {
+			switch (type) {
+				case RSE::LIGHT_OMNI:
+					energy = atom_omni_energy(light->param[RSE::LIGHT_PARAM_ENERGY], light->param[RSE::LIGHT_PARAM_INTENSITY], sign, fade, exposure_normalization, atom_normalize_default_intensities);
+					break;
+				case RSE::LIGHT_SPOT:
+					energy = atom_spot_energy(light->param[RSE::LIGHT_PARAM_ENERGY], light->param[RSE::LIGHT_PARAM_INTENSITY], light->param[RSE::LIGHT_PARAM_SPOT_ANGLE], sign, fade, exposure_normalization, atom_normalize_default_intensities);
+					break;
+				default:
+					energy = sign * light->param[RSE::LIGHT_PARAM_ENERGY] * fade;
 			}
 		} else {
-			energy *= Math::PI;
-		}
+			energy = sign * light->param[RSE::LIGHT_PARAM_ENERGY] * fade;
 
-		if (p_render_data->camera_attributes.is_valid()) {
-			energy *= RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
+			if (use_physical_light_units) {
+				energy *= light->param[RSE::LIGHT_PARAM_INTENSITY];
+
+				// Convert from Luminous Power to Luminous Intensity
+				if (type == RSE::LIGHT_OMNI) {
+					energy *= 1.0 / (Math::PI * 4.0);
+				} else if (type == RSE::LIGHT_AREA) {
+					energy *= 1.0 / (Math::PI * 2.0);
+				} else {
+					// Spot Lights are not physically accurate, Luminous Intensity should change in relation to the cone angle.
+					// We make this assumption to keep them easy to control.
+					energy *= 1.0 / Math::PI;
+				}
+			} else {
+				energy *= Math::PI;
+			}
+
+			energy *= exposure_normalization;
 		}
 
 		light_data.color[0] = linear_col.r * energy;
