@@ -3674,6 +3674,13 @@ void RenderingServer::init() {
 	GLOBAL_DEF_RST("rendering/atom_forward_scale/light_behavior/debug_final_light_rgb", false);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::FLOAT, "rendering/atom_forward_scale/light_behavior/filmic_exposure_bias", PROPERTY_HINT_RANGE, "-8,8,0.01"), 2.2);
 	GLOBAL_DEF_RST("rendering/atom_forward_scale/light_behavior/normalize_default_intensities", true);
+	GLOBAL_DEF_RST("rendering/atom_forward_scale/emission_behavior/enabled", false);
+	GLOBAL_DEF_RST("rendering/atom_forward_scale/emission_behavior/emission_as_photometric_luminance", true);
+	GLOBAL_DEF_RST("rendering/atom_forward_scale/emission_behavior/emission_texture_as_energy_filter", true);
+	GLOBAL_DEF_RST(PropertyInfo(Variant::FLOAT, "rendering/atom_forward_scale/emission_behavior/default_emission_nits", PROPERTY_HINT_RANGE, "0.0,10000.0,0.01,or_greater,suffix:nt"), 100.0);
+	GLOBAL_DEF_RST(PropertyInfo(Variant::FLOAT, "rendering/atom_forward_scale/emission_behavior/max_emission_nits", PROPERTY_HINT_RANGE, "1.0,1000000.0,0.01,or_greater,suffix:nt"), 10000.0);
+	GLOBAL_DEF_RST("rendering/atom_forward_scale/emission_behavior/filmic_emission_response", true);
+	GLOBAL_DEF_RST("rendering/atom_forward_scale/emission_behavior/debug_emission_rgb", false);
 
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/directional_shadow/size", PROPERTY_HINT_RANGE, "256,16384"), 4096);
 	GLOBAL_DEF("rendering/lights_and_shadows/directional_shadow/size.mobile", 2048);
