@@ -3669,10 +3669,10 @@ void RenderingServer::init() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/limits/time/time_rollover_secs", PROPERTY_HINT_RANGE, "1,10000,1,or_greater,suffix:s"), 3600);
 
 	GLOBAL_DEF_RST("rendering/lights_and_shadows/use_physical_light_units", false);
-	GLOBAL_DEF_RST("rendering/atom_forward_scale/light_behavior/enabled", false);
+	GLOBAL_DEF_RST("rendering/atom_forward_scale/light_behavior/enabled", true);
 	GLOBAL_DEF_RST("rendering/atom_forward_scale/light_behavior/color_as_energy_filter", true);
 	GLOBAL_DEF_RST("rendering/atom_forward_scale/light_behavior/debug_final_light_rgb", false);
-	GLOBAL_DEF_RST(PropertyInfo(Variant::FLOAT, "rendering/atom_forward_scale/light_behavior/filmic_exposure_bias", PROPERTY_HINT_RANGE, "-8,8,0.01"), 0.0);
+	GLOBAL_DEF_RST(PropertyInfo(Variant::FLOAT, "rendering/atom_forward_scale/light_behavior/filmic_exposure_bias", PROPERTY_HINT_RANGE, "-8,8,0.01"), 2.2);
 	GLOBAL_DEF_RST("rendering/atom_forward_scale/light_behavior/normalize_default_intensities", true);
 
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/directional_shadow/size", PROPERTY_HINT_RANGE, "256,16384"), 4096);
