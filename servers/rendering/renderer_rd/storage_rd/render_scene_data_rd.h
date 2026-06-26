@@ -181,6 +181,10 @@ private:
 		float IBL_exposure_normalization; // Adjusts for baked exposure.
 		uint32_t camera_visible_layers;
 		float pass_alpha_multiplier;
+		float atom_emission_default_nits;
+		float atom_emission_max_nits;
+		float atom_emission_filmic_exposure_multiplier;
+		uint32_t atom_emission_flags;
 	};
 
 	struct UBODATA {

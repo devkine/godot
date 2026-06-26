@@ -1073,6 +1073,46 @@ layout(location = 2) out vec2 motion_vector;
 
 #include "../scene_forward_aa_inc.glsl"
 
+bool atom_emission_enabled() {
+	return bool(scene_data_block.data.atom_emission_flags & ATOM_EMISSION_FLAG_ENABLED);
+}
+
+bool atom_emission_texture_as_energy_filter() {
+	return bool(scene_data_block.data.atom_emission_flags & ATOM_EMISSION_FLAG_TEXTURE_AS_ENERGY_FILTER);
+}
+
+float atom_emission_nits_to_energy(float p_emission_nits) {
+	return clamp(p_emission_nits, 0.0, scene_data_block.data.atom_emission_max_nits);
+}
+
+float atom_resolve_emission_energy(float p_emission_energy) {
+	if (bool(scene_data_block.data.atom_emission_flags & ATOM_EMISSION_FLAG_PHOTOMETRIC_LUMINANCE)) {
+		return atom_emission_nits_to_energy(p_emission_energy);
+	}
+
+	return p_emission_energy;
+}
+
+vec3 atom_apply_emission_energy_filter(vec3 p_emission_color, vec3 p_emission_texture) {
+	return p_emission_color * p_emission_texture;
+}
+
+vec3 atom_apply_filmic_emission_bias(vec3 p_emission) {
+	return p_emission * scene_data_block.data.atom_emission_filmic_exposure_multiplier;
+}
+
+vec3 atom_apply_shared_emission_response(vec3 p_emission) {
+	if (!atom_emission_enabled()) {
+		return p_emission;
+	}
+
+	p_emission = clamp(p_emission, vec3(0.0), vec3(scene_data_block.data.atom_emission_max_nits));
+	if (bool(scene_data_block.data.atom_emission_flags & ATOM_EMISSION_FLAG_FILMIC_RESPONSE)) {
+		p_emission = atom_apply_filmic_emission_bias(p_emission);
+	}
+	return p_emission;
+}
+
 #if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
 
 // Default to SPECULAR_SCHLICK_GGX.
@@ -1680,6 +1720,7 @@ void fragment_shader(in SceneData scene_data) {
 #ifndef MODE_UNSHADED
 	// Used in regular draw pass and when drawing SDFs for SDFGI and materials for VoxelGI.
 	emission *= scene_data.emissive_exposure_normalization;
+	emission = atom_apply_shared_emission_response(emission);
 #endif
 
 #if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)

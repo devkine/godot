@@ -12,6 +12,11 @@
 #define SCENE_DATA_FLAGS_USE_PANCAKE_SHADOWS (1 << 6)
 #define SCENE_DATA_FLAGS_IN_SHADOW_PASS (1 << 7)
 
+#define ATOM_EMISSION_FLAG_ENABLED (1 << 0)
+#define ATOM_EMISSION_FLAG_PHOTOMETRIC_LUMINANCE (1 << 1)
+#define ATOM_EMISSION_FLAG_TEXTURE_AS_ENERGY_FILTER (1 << 2)
+#define ATOM_EMISSION_FLAG_FILMIC_RESPONSE (1 << 3)
+
 struct SceneData {
 	mat4 projection_matrix;
 	mat4 inv_projection_matrix;
@@ -81,4 +86,8 @@ struct SceneData {
 	float IBL_exposure_normalization;
 	uint camera_visible_layers;
 	float pass_alpha_multiplier;
+	float atom_emission_default_nits;
+	float atom_emission_max_nits;
+	float atom_emission_filmic_exposure_multiplier;
+	uint atom_emission_flags;
 };

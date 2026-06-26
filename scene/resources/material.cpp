@@ -42,6 +42,41 @@
 #include "scene/resources/texture.h"
 #include "servers/rendering/rendering_server.h"
 
+namespace {
+
+constexpr uint32_t ATOM_EMISSION_DEBUG_MAX_LOGS_PER_FRAME = 8;
+
+bool atom_emission_debug_can_log(bool p_enabled) {
+	if (!p_enabled) {
+		return false;
+	}
+
+	static uint64_t last_frame = UINT64_MAX;
+	static uint32_t logged_count = 0;
+	const uint64_t frame = Engine::get_singleton()->get_frames_drawn();
+	if (frame != last_frame) {
+		last_frame = frame;
+		logged_count = 0;
+	}
+
+	if (logged_count >= ATOM_EMISSION_DEBUG_MAX_LOGS_PER_FRAME) {
+		return false;
+	}
+
+	logged_count++;
+	return true;
+}
+
+float atom_emission_filmic_multiplier() {
+	if (!GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/filmic_emission_response")) {
+		return 1.0f;
+	}
+
+	return Math::pow(2.0f, GLOBAL_GET_CACHED(float, "rendering/atom_forward_scale/light_behavior/filmic_exposure_bias"));
+}
+
+} // namespace
+
 void Material::set_next_pass(const Ref<Material> &p_pass) {
 	for (Ref<Material> pass_child = p_pass; pass_child.is_valid(); pass_child = pass_child->get_next_pass()) {
 		ERR_FAIL_COND_MSG(pass_child == this, "Can't set as next_pass one of its parents to prevent crashes due to recursive loop.");
@@ -1754,15 +1789,20 @@ void fragment() {)";
 			}
 		}
 
+		code += R"(	if (atom_emission_enabled() && atom_emission_texture_as_energy_filter()) {
+		EMISSION = atom_apply_emission_energy_filter(emission.rgb, emission_tex) * atom_resolve_emission_energy(emission_energy);
+	} else {
+)";
 		if (emission_op == EMISSION_OP_ADD) {
-			code += R"(	// Emission Operator: Add
-	EMISSION = (emission.rgb + emission_tex) * emission_energy;
+			code += R"(		// Emission Operator: Add
+		EMISSION = (emission.rgb + emission_tex) * emission_energy;
 )";
 		} else {
-			code += R"(	// Emission Operator: Multiply
-	EMISSION = (emission.rgb * emission_tex) * emission_energy;
+			code += R"(		// Emission Operator: Multiply
+		EMISSION = (emission.rgb * emission_tex) * emission_energy;
 )";
 		}
+		code += "\t}\n";
 	}
 
 	if (features[FEATURE_REFRACTION]) {
@@ -2119,6 +2159,61 @@ void BaseMaterial3D::_material_set_param(const StringName &p_name, const Variant
 	}
 }
 
+float BaseMaterial3D::_get_emission_energy_upload() const {
+	const bool use_physical_light_units = GLOBAL_GET_CACHED(bool, "rendering/lights_and_shadows/use_physical_light_units");
+	const bool atom_emission_enabled = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/enabled");
+	const bool atom_emission_photometric_luminance = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/emission_as_photometric_luminance");
+
+	if (use_physical_light_units) {
+		return emission_energy_multiplier * emission_intensity;
+	}
+
+	if (atom_emission_enabled && atom_emission_photometric_luminance) {
+		return emission_energy_multiplier * GLOBAL_GET_CACHED(float, "rendering/atom_forward_scale/emission_behavior/default_emission_nits");
+	}
+
+	return emission_energy_multiplier;
+}
+
+Color BaseMaterial3D::_get_atom_debug_emission_rgb() const {
+	float energy = _get_emission_energy_upload();
+	if (GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/enabled")) {
+		energy = CLAMP(energy, 0.0f, GLOBAL_GET_CACHED(float, "rendering/atom_forward_scale/emission_behavior/max_emission_nits"));
+		energy *= atom_emission_filmic_multiplier();
+	}
+
+	const Color emission_linear = emission.srgb_to_linear();
+	return Color(emission_linear.r * energy, emission_linear.g * energy, emission_linear.b * energy);
+}
+
+void BaseMaterial3D::_update_emission_energy_param() {
+	_material_set_param(shader_names->emission_energy, _get_emission_energy_upload());
+	_debug_log_atom_emission();
+}
+
+void BaseMaterial3D::_debug_log_atom_emission() const {
+	const bool debug_emission_rgb = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/debug_emission_rgb");
+	if (!atom_emission_debug_can_log(debug_emission_rgb)) {
+		return;
+	}
+
+	const RID emission_texture_rid = textures[TEXTURE_EMISSION].is_valid() ? textures[TEXTURE_EMISSION]->get_rid() : RID();
+	const String material_label = get_path().is_empty() ? vformat("RID(%d)", get_rid().get_id()) : get_path();
+	const Color final_hdr_emission_rgb = _get_atom_debug_emission_rgb();
+	print_line(vformat("[AtomEmissionDebug] material=%s emission_color=(%.6f, %.6f, %.6f) emission_texture=%s emission_energy=%.6f computed_nits=%.6f final_hdr_emission_rgb=(%.6f, %.6f, %.6f) atom_emission_enabled=%s",
+			material_label,
+			emission.r,
+			emission.g,
+			emission.b,
+			emission_texture_rid.is_valid() ? vformat("RID(%d)", emission_texture_rid.get_id()) : String("none"),
+			emission_energy_multiplier,
+			_get_emission_energy_upload(),
+			final_hdr_emission_rgb.r,
+			final_hdr_emission_rgb.g,
+			final_hdr_emission_rgb.b,
+			GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/enabled") ? "true" : "false"));
+}
+
 void BaseMaterial3D::set_albedo(const Color &p_albedo) {
 	albedo = p_albedo;
 	_material_set_param(shader_names->albedo, p_albedo);
@@ -2158,6 +2253,7 @@ float BaseMaterial3D::get_metallic() const {
 void BaseMaterial3D::set_emission(const Color &p_emission) {
 	emission = p_emission;
 	_material_set_param(shader_names->emission, p_emission);
+	_debug_log_atom_emission();
 }
 
 Color BaseMaterial3D::get_emission() const {
@@ -2166,12 +2262,7 @@ Color BaseMaterial3D::get_emission() const {
 
 void BaseMaterial3D::set_emission_energy_multiplier(float p_emission_energy_multiplier) {
 	emission_energy_multiplier = p_emission_energy_multiplier;
-
-	if (GLOBAL_GET_CACHED(bool, "rendering/lights_and_shadows/use_physical_light_units")) {
-		_material_set_param(shader_names->emission_energy, p_emission_energy_multiplier * emission_intensity);
-	} else {
-		_material_set_param(shader_names->emission_energy, p_emission_energy_multiplier);
-	}
+	_update_emission_energy_param();
 }
 
 float BaseMaterial3D::get_emission_energy_multiplier() const {
@@ -2181,7 +2272,7 @@ float BaseMaterial3D::get_emission_energy_multiplier() const {
 void BaseMaterial3D::set_emission_intensity(float p_emission_intensity) {
 	ERR_FAIL_COND_EDMSG(!GLOBAL_GET_CACHED(bool, "rendering/lights_and_shadows/use_physical_light_units"), "Cannot set material emission intensity when Physical Light Units disabled.");
 	emission_intensity = p_emission_intensity;
-	_material_set_param(shader_names->emission_energy, emission_energy_multiplier * emission_intensity);
+	_update_emission_energy_param();
 }
 
 float BaseMaterial3D::get_emission_intensity() const {
@@ -2514,6 +2605,10 @@ void BaseMaterial3D::set_texture(TextureParam p_param, const Ref<Texture2D> &p_t
 
 	if (p_texture.is_valid() && p_param == TEXTURE_ALBEDO) {
 		_material_set_param(shader_names->albedo_texture_size, Vector2i(p_texture->get_width(), p_texture->get_height()));
+	}
+
+	if (p_param == TEXTURE_EMISSION) {
+		_debug_log_atom_emission();
 	}
 
 	notify_property_list_changed();

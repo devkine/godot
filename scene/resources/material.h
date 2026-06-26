@@ -530,6 +530,10 @@ private:
 	_FORCE_INLINE_ void _queue_shader_change();
 	void _check_material_rid();
 	void _material_set_param(const StringName &p_name, const Variant &p_value);
+	float _get_emission_energy_upload() const;
+	Color _get_atom_debug_emission_rgb() const;
+	void _update_emission_energy_param();
+	void _debug_log_atom_emission() const;
 
 	bool orm;
 	RID shader_rid;

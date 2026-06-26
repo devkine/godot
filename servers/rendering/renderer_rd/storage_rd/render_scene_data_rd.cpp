@@ -30,6 +30,7 @@
 
 #include "render_scene_data_rd.h"
 
+#include "core/config/project_settings.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
@@ -255,6 +256,23 @@ void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RSE::ViewportDebugDraw 
 	} else {
 		ubo.emissive_exposure_normalization = 1.0;
 		ubo.IBL_exposure_normalization = 1.0;
+	}
+
+	ubo.atom_emission_default_nits = GLOBAL_GET_CACHED(float, "rendering/atom_forward_scale/emission_behavior/default_emission_nits");
+	ubo.atom_emission_max_nits = GLOBAL_GET_CACHED(float, "rendering/atom_forward_scale/emission_behavior/max_emission_nits");
+	ubo.atom_emission_filmic_exposure_multiplier = GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/filmic_emission_response") ? Math::pow(2.0f, GLOBAL_GET_CACHED(float, "rendering/atom_forward_scale/light_behavior/filmic_exposure_bias")) : 1.0f;
+	ubo.atom_emission_flags = 0;
+	if (GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/enabled")) {
+		ubo.atom_emission_flags |= 1 << 0;
+	}
+	if (GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/emission_as_photometric_luminance")) {
+		ubo.atom_emission_flags |= 1 << 1;
+	}
+	if (GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/emission_texture_as_energy_filter")) {
+		ubo.atom_emission_flags |= 1 << 2;
+	}
+	if (GLOBAL_GET_CACHED(bool, "rendering/atom_forward_scale/emission_behavior/filmic_emission_response")) {
+		ubo.atom_emission_flags |= 1 << 3;
 	}
 
 	bool roughness_limiter_enabled = p_opaque_render_buffers && render_scene_render->screen_space_roughness_limiter_is_active();
